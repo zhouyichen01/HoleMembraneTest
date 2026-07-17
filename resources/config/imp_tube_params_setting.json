@@ -1,0 +1,9 @@
+{
+    "tube_params": {
+        "tube_temperature": 22.0,
+        "microphone_to_sample_distance": 17.0,
+        "microphone_sensitivity": 0.112,
+        "tubu_inner_diameter": 20.0,
+        "sample_area": 28.0
+    }
+}
