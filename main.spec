@@ -30,7 +30,7 @@ exe = EXE(
     a.zipfiles,
     a.datas,
     [],
-    name='2MIC薄层材料测试系统',
+    name='小孔膜片阻抗管测试系统',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

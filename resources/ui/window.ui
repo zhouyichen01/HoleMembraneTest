@@ -11,7 +11,7 @@
    </rect>
   </property>
   <property name="windowTitle">
-   <string>MainWindow</string>
+   <string>小孔膜片阻抗管测试系统</string>
   </property>
   <property name="styleSheet">
    <string notr="true"/>
@@ -145,21 +145,6 @@ font: bold 12pt &quot;Microsoft YaHei&quot;;  /* 使字体加粗 */</string>
           <item>
            <property name="text">
             <string>传输阻抗率Z Im</string>
-           </property>
-          </item>
-          <item>
-           <property name="text">
-            <string>质点速度v abs</string>
-           </property>
-          </item>
-          <item>
-           <property name="text">
-            <string>质点速度v Re</string>
-           </property>
-          </item>
-          <item>
-           <property name="text">
-            <string>质点速度v Im</string>
            </property>
           </item>
          </widget>

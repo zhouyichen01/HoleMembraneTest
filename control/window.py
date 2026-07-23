@@ -68,7 +68,7 @@ class MainWindow(QMainWindow):
         ui_file.open(QFile.ReadOnly)
         loadUi(ui_file, self)
         # 设置窗口标题和大小
-        self.setWindowTitle('2MIC薄层材料测试系统V1.0')
+        self.setWindowTitle('小孔膜片阻抗管测试系统')
         self.showMaximized()
 
         # 设置窗口图标
@@ -201,23 +201,14 @@ class MainWindow(QMainWindow):
 
             if plot_type == "传输阻抗率Z abs":
                 # 获取当前显示的曲线数据
-                freq_array = np.asarray(self.test_result["ff"], dtype=float)
+                freq_array = np.asarray(self.test_result["f"], dtype=float)
                 y_array = self.test_result["Z_abs"]
             elif plot_type == "传输阻抗率Z Re":
-                freq_array = np.asarray(self.test_result["ff"], dtype=float)
+                freq_array = np.asarray(self.test_result["f"], dtype=float)
                 y_array = np.abs(self.test_result["Z_Re"])
             elif plot_type == "传输阻抗率Z Im":
-                freq_array = np.asarray(self.test_result["ff"], dtype=float)
+                freq_array = np.asarray(self.test_result["f"], dtype=float)
                 y_array = np.abs(self.test_result["Z_Im"])
-            elif plot_type == "质点速度v abs":
-                freq_array = np.asarray(self.test_result["f"], dtype=float)
-                y_array = self.test_result["V_abs"]
-            elif plot_type == "质点速度v Re":
-                freq_array = np.asarray(self.test_result["f"], dtype=float)
-                y_array = self.test_result["V_Re"]
-            elif plot_type == "质点速度v Im":
-                freq_array = np.asarray(self.test_result["f"], dtype=float)
-                y_array = self.test_result["V_Im"]
             else:
                 return
             y_disp = safe_log(y_array)
@@ -251,7 +242,7 @@ class MainWindow(QMainWindow):
             self.hLine.setPos(y_log)
 
             # 添加点击标记
-            if hasattr(self, "click_marker"):
+            if getattr(self, "click_marker", None) is not None:
                 self.plot3.removeItem(self.click_marker)
             self.click_marker = pyqtgraph.ScatterPlotItem(
                 [x_log], [y_log],
@@ -437,6 +428,27 @@ class MainWindow(QMainWindow):
             self.logger.error(f"读取配置失败: {e}")
             QMessageBox.warning(self, "错误", f"读取{tube_path}配置失败：{e}")
 
+    def _get_lumped_parameter_inputs(self):
+        if not self.tube_params:
+            QMessageBox.warning(self, "参数错误", "阻抗管参数未加载，请先检查参数设置。")
+            return None
+        try:
+            tube_temperature = float(self.tube_params.get("tube_temperature"))
+            s_sample_mm2 = float(self.tube_params.get("s_sample_mm2"))
+            v_backing_cc = float(self.tube_params.get("v_backing_cc"))
+        except (TypeError, ValueError):
+            QMessageBox.warning(self, "参数错误", "阻抗管参数不完整，请填写管中温度、待测样品面积和背腔体积。")
+            return None
+
+        if s_sample_mm2 <= 0:
+            QMessageBox.warning(self, "参数错误", "待测样品面积 s_sample_mm2 必须大于 0。")
+            return None
+        if v_backing_cc <= 0:
+            QMessageBox.warning(self, "参数错误", "背腔体积 v_backing_cc 必须大于 0。")
+            return None
+
+        return tube_temperature, s_sample_mm2, v_backing_cc
+
     def _load_mic_binding_indices(self):
         # 默认顺序
         idx1, idx2 = 0, 1
@@ -468,12 +480,22 @@ class MainWindow(QMainWindow):
         QApplication.processEvents()
         self.record_and_plot()
 
+    def clear_plot3_result(self):
+        self.plot3.clear()
+        self.test_result = None
+        self.plot_state = False
+        self.crosshair_enabled = False
+        self.vLine = None
+        self.hLine = None
+        self.text = None
+        self.click_marker = None
+
     def record_and_plot(self):
         try:
             # 清空显示（不要 plot().clear() 叠加）
             self.curve1.setData([], [])
             self.curve2.setData([], [])
-            self.curve3.setData([], [])
+            self.clear_plot3_result()
             # 清除 十字线
             if self.crosshair_enabled:
                 self.del_cross()
@@ -626,27 +648,26 @@ class MainWindow(QMainWindow):
         self.update_time_plot(time_axis, self.mic1_pa, self.mic2_pa)
 
         mic1_cal_data, mic2_cal_data = self.load_calibration_data()
-        ff, f, Z_abs, Z_Re, Z_Im, V_abs, V_Re, V_Im = utils.calculate_impedance_velocity(
+        lumped_inputs = self._get_lumped_parameter_inputs()
+        if lumped_inputs is None:
+            self.test_state.setText("参数错误")
+            return
+        tube_temperature, s_sample_mm2, v_backing_cc = lumped_inputs
+        f, Z_abs, Z_Re, Z_Im = utils.calculate_impedance_Lumped_parameter(
             mic2=self.mic2_data,
             mic1=self.mic1_data,
             mic2_cal=mic2_cal_data,
             mic1_cal=mic1_cal_data,
             sf=samplerate,
-            temp=self.tube_params.get("tube_temperature"),
-            dia_tube_mm=self.tube_params.get("tubu_inner_diameter"),
-            mic_dis_mm=self.tube_params.get("microphone_to_sample_distance"),
-            s2=self.tube_params.get("sample_area"),
-            sen=self.tube_params.get("microphone_sensitivity")
+            temp=tube_temperature,
+            s_sample_mm2=s_sample_mm2,
+            v_backing_cc=v_backing_cc,
         )
         self.test_result = {
-            "ff": ff,
             "f": f,
             "Z_abs": Z_abs,
             "Z_Re": Z_Re,
             "Z_Im": Z_Im,
-            "V_abs": V_abs,
-            "V_Re": V_Re,
-            "V_Im": V_Im
         }
         self.update_plot3_by_selector()
 
@@ -718,33 +739,28 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "提示", "无测试结果，请先进行测试！")
             return
         # 获取原始数据
-        line_ff = self.test_result["ff"]
         line_f = self.test_result["f"]
 
         # 线性==>对数
-        log_Z_abs = np.log10(self.test_result["Z_abs"])
-        log_Z_Re = np.log10(np.abs(self.test_result["Z_Re"]))
-        log_Z_Im = np.log10(np.abs(self.test_result["Z_Im"]))
-        log_V_abs = np.log10(self.test_result["V_abs"])
-        log_V_Re = np.log10(self.test_result["V_Re"])
-        log_V_Im = np.log10(self.test_result["V_Im"])
+        def safe_abs_log(data):
+            data = np.abs(np.asarray(data, dtype=float)).copy()
+            data[data <= 0] = np.nan
+            return np.log10(data)
+
+        log_Z_abs = safe_abs_log(self.test_result["Z_abs"])
+        log_Z_Re = safe_abs_log(self.test_result["Z_Re"])
+        log_Z_Im = safe_abs_log(self.test_result["Z_Im"])
 
         # 应用Savitzky-Golay滤波器对对数数据进行平滑
         if self.soft_value > 3:
             log_Z_abs = savgol_filter(log_Z_abs, window_length=self.soft_value, polyorder=3)
             log_Z_Re = savgol_filter(log_Z_Re, window_length=self.soft_value, polyorder=3)
             log_Z_Im = savgol_filter(log_Z_Im, window_length=self.soft_value, polyorder=3)
-            log_V_abs = savgol_filter(log_V_abs, window_length=self.soft_value, polyorder=3)
-            log_V_Re = savgol_filter(log_V_Re, window_length=self.soft_value, polyorder=3)
-            log_V_Im = savgol_filter(log_V_Im, window_length=self.soft_value, polyorder=3)
 
         # 对数==>线性
         Z_abs = 10 ** log_Z_abs
         Z_Re = 10 ** log_Z_Re
         Z_Im = 10 ** log_Z_Im
-        V_abs = 10 ** log_V_abs
-        V_Re = 10 ** log_V_Re
-        V_Im = 10 ** log_V_Im
 
         save_dir = QFileDialog.getExistingDirectory(self, "选择保存文件夹")
         if not save_dir:
@@ -754,18 +770,11 @@ class MainWindow(QMainWindow):
             file1 = os.path.join(save_dir, "传输阻抗率测试结果.csv")
             with open(file1, "w", newline='', encoding='utf-8-sig') as f:
                 writer = csv.writer(f)
-                writer.writerow(["ff", "Z_abs", "Z_Re", "Z_Im"])
-                for i in range(len(line_ff)):
-                    writer.writerow([line_ff[i], Z_abs[i], Z_Re[i], Z_Im[i]])
-
-            file2 = os.path.join(save_dir, "质点速度测试结果.csv")
-            with open(file2, "w", newline='', encoding='utf-8-sig') as f:
-                writer = csv.writer(f)
-                writer.writerow(["f", "v_abs", "v_Re", "v_Im"])
+                writer.writerow(["f", "Z_abs", "Z_Re", "Z_Im"])
                 for i in range(len(line_f)):
-                    writer.writerow([line_f[i], V_abs[i], V_Re[i], V_Im[i]])
+                    writer.writerow([line_f[i], Z_abs[i], Z_Re[i], Z_Im[i]])
 
-            msg = f"保存成功！\n文件已保存至：\n{file1}\n{file2}"
+            msg = f"保存成功！\n文件已保存至：\n{file1}"
             QMessageBox.information(self, "Success", msg)
 
         except Exception as e:
@@ -782,14 +791,9 @@ class MainWindow(QMainWindow):
             self.plot3.setLabel('left', 'Z Re', units='Rayl')
         elif text == "传输阻抗率Z Im":
             self.plot3.setLabel('left', 'Z Im', units='Rayl')
-        elif text == "质点速度v abs":
-            self.plot3.setLabel('left', 'v abs', units='m/s')
-        elif text == "质点速度v Re":
-            self.plot3.setLabel('left', 'v Re', units='m/s')
-        elif text == "质点速度v Im":
-            self.plot3.setLabel('left', 'v Im', units='m/s')
         else:
             print("没这个选择项")
+            return
 
         if not self.test_result:
             QMessageBox.warning(self, "提示", "无测试结果，请先进行测试！")
@@ -812,48 +816,31 @@ class MainWindow(QMainWindow):
         self.plot3.scene().sigMouseClicked.connect(self.on_plot3_clicked)
 
         if text == "传输阻抗率Z abs":
-            log_ff = np.log10(self.test_result["ff"])
-            log_Z_abs = np.log10(self.test_result["Z_abs"])
+            log_f = np.log10(np.asarray(self.test_result["f"], dtype=float))
+            log_Z_abs = np.asarray(self.test_result["Z_abs"], dtype=float).copy()
+            log_Z_abs[log_Z_abs <= 0] = np.nan
+            log_Z_abs = np.log10(log_Z_abs)
             if self.soft_value > 3:
                 log_Z_abs = savgol_filter(log_Z_abs, window_length=self.soft_value, polyorder=3)
-            # index = np.where(self.test_result["ff"] == 1000)[0]
-            # print(index, self.test_result["Z_abs"][index], np.log10(self.test_result["Z_abs"])[index], log_Z_abs[index])
-            self.plot3.plot(log_ff, log_Z_abs, pen=mkPen(color='black', width=2))
+            self.plot3.plot(log_f, log_Z_abs, pen=mkPen(color='black', width=2))
 
         elif text == "传输阻抗率Z Re":
-            log_ff = np.log10(self.test_result["ff"])
-            log_Z_Re = np.log10(np.abs(self.test_result["Z_Re"]))
+            log_f = np.log10(np.asarray(self.test_result["f"], dtype=float))
+            log_Z_Re = np.abs(np.asarray(self.test_result["Z_Re"], dtype=float))
+            log_Z_Re[log_Z_Re <= 0] = np.nan
+            log_Z_Re = np.log10(log_Z_Re)
             if self.soft_value > 3:
                 log_Z_Re = savgol_filter(log_Z_Re, window_length=self.soft_value, polyorder=3)
-            self.plot3.plot(log_ff, log_Z_Re, pen=mkPen(color='black', width=2))
+            self.plot3.plot(log_f, log_Z_Re, pen=mkPen(color='black', width=2))
 
         elif text == "传输阻抗率Z Im":
-            log_ff = np.log10(self.test_result["ff"])
-            log_Z_Im = np.log10(np.abs(self.test_result["Z_Im"]))
+            log_f = np.log10(np.asarray(self.test_result["f"], dtype=float))
+            log_Z_Im = np.abs(np.asarray(self.test_result["Z_Im"], dtype=float))
+            log_Z_Im[log_Z_Im <= 0] = np.nan
+            log_Z_Im = np.log10(log_Z_Im)
             if self.soft_value > 3:
                 log_Z_Im = savgol_filter(log_Z_Im, window_length=self.soft_value, polyorder=3)
-            self.plot3.plot(log_ff, log_Z_Im, pen=mkPen(color='black', width=2))
-
-        elif text == "质点速度v abs":
-            log_f = np.log10(self.test_result["f"])
-            log_V_abs = np.log10(self.test_result["V_abs"])
-            if self.soft_value > 3:
-                log_V_abs = savgol_filter(log_V_abs, window_length=self.soft_value, polyorder=3)
-            self.plot3.plot(log_f, log_V_abs, pen=mkPen(color='black', width=2))
-
-        elif text == "质点速度v Re":
-            log_f = np.log10(self.test_result["f"])
-            log_V_Re = np.log10(self.test_result["V_Re"])
-            if self.soft_value > 3:
-                log_V_Re = savgol_filter(log_V_Re, window_length=self.soft_value, polyorder=3)
-            self.plot3.plot(log_f, log_V_Re, pen=mkPen(color='black', width=2))
-
-        elif text == "质点速度v Im":
-            log_f = np.log10(self.test_result["f"])
-            log_V_Im = np.log10(self.test_result["V_Im"])
-            if self.soft_value > 3:
-                log_V_Im = savgol_filter(log_V_Im, window_length=self.soft_value, polyorder=3)
-            self.plot3.plot(log_f, log_V_Im, pen=mkPen(color='black', width=2))
+            self.plot3.plot(log_f, log_Z_Im, pen=mkPen(color='black', width=2))
         else:
             print("无")
 
@@ -886,7 +873,7 @@ class MainWindow(QMainWindow):
 
     def popup_pdf(self):
         base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-        pdf_path = os.path.join(base_dir, "resources", "file", "2MIC薄层材料测试系统V1.0操作使用手册.pdf")
+        pdf_path = os.path.join(base_dir, "resources", "file", "小孔膜片阻抗管测试系统操作使用手册.pdf")
         if os.path.exists(pdf_path):
             if sys.platform.startswith("win"):
                 os.startfile(pdf_path)  # Windows

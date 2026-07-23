@@ -11,6 +11,7 @@ from control.window import MainWindow
 if __name__ == '__main__':
     utils.copy_all_configs_to_base_dir()
     app = QApplication(sys.argv)
+    app.setApplicationName("小孔膜片阻抗管测试系统")
     utils.init_selected_devide()
     window = MainWindow()
     window.show()

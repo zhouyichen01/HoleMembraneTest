@@ -43,9 +43,6 @@ class ImptubeParamsSetInterface(QDialog):
         self.graphicsView.setScene(scene)
 
     def init_fun(self):
-        self.yincang1.setStyleSheet("background-color: transparent; border: none; color: transparent;")
-        self.lineEdit_6.setStyleSheet("background-color: transparent; border: none; color: transparent;")
-        self.lineEdit_6.setEnabled(False)
         self.save_button.clicked.connect(self.save)
 
     def init_config(self):
@@ -55,11 +52,8 @@ class ImptubeParamsSetInterface(QDialog):
                 config = json.load(f)
                 self.tube_params = config.get("tube_params", {})
                 self.tube_temperature_value.setText(str(self.tube_params.get("tube_temperature", "")))
-                self.microphone_to_sample_distance_value.setText(
-                    str(self.tube_params.get("microphone_to_sample_distance", "")))
-                self.microphone_sensitivity_value.setText(str(self.tube_params.get("microphone_sensitivity", "")))
-                self.tubu_inner_diameter_value.setText(str(self.tube_params.get("tubu_inner_diameter", "")))
-                self.sample_area_value.setText(str(self.tube_params.get("sample_area", "")))
+                self.sample_area_value.setText(str(self.tube_params.get("s_sample_mm2", "")))
+                self.v_backing_cc_value.setText(str(self.tube_params.get("v_backing_cc", "")))
 
         except Exception as e:
             self.logger.error(f"读取配置失败: {e}")
@@ -68,17 +62,18 @@ class ImptubeParamsSetInterface(QDialog):
     def save(self):
         config_path = utils.get_config_path("imp_tube_params_setting.json")
         try:
+            s_sample_mm2 = float(self.sample_area_value.text())
             config = {
                 "tube_params": {
                     "tube_temperature": float(self.tube_temperature_value.text()),
-                    "microphone_to_sample_distance": float(self.microphone_to_sample_distance_value.text()),
-                    "microphone_sensitivity": float(self.microphone_sensitivity_value.text()),
-                    "tubu_inner_diameter": float(self.tubu_inner_diameter_value.text()),
-                    "sample_area": float(self.sample_area_value.text())
+                    "s_sample_mm2": s_sample_mm2,
+                    "v_backing_cc": float(self.v_backing_cc_value.text())
                 }
             }
             with open(config_path, "w", encoding="utf-8") as f:
                 json.dump(config, f, indent=4, ensure_ascii=False)
+            if self.parent:
+                self.parent.tube_params = config["tube_params"]
             QMessageBox.information(self, "成功", "参数保存成功")
             self.logger.info("参数保存成功")
         except Exception as e:
