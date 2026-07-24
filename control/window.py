@@ -114,7 +114,7 @@ class MainWindow(QMainWindow):
     def init_image(self):
         scene = QGraphicsScene()
         pixmap = QPixmap(":/images/2mic薄层_画板.png")
-        scaled_pixmap = pixmap.scaled(390, 282, Qt.KeepAspectRatio, Qt.SmoothTransformation)  # 缩小图像
+        scaled_pixmap = pixmap.scaled(600, 400, Qt.KeepAspectRatio, Qt.SmoothTransformation)  # 缩小图像
         pixmap_item = QGraphicsPixmapItem(scaled_pixmap)
         scene.addItem(pixmap_item)
         self.schematic1.setScene(scene)
