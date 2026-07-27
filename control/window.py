@@ -24,7 +24,7 @@ from control.mic_adjust_interface import MicAdjustInterface
 from control.output_signal_setting_interface import OutputSignalSetInterface
 from control.output_voltage_interface import MicoutputVoltageInterface, SoundcardCalibrationManager
 from control.select_deivce_interface import SelectDeviceInterface
-from control.utils import utils, cfg_filter_interface
+from control.utils import utils
 from control.utils.audio_session_manager import AudioSessionManager
 from control.utils.streaming_audio_processor import DuplexStreamingPlayRec
 from custom.customSignals import sign
@@ -677,16 +677,15 @@ class MainWindow(QMainWindow):
             QApplication.processEvents()
             # 获取设备采样率
             samplerate = utils.get_device_info()
-            # 获取测试前yaml文件数据
-            result, cfg, msg = utils.get_yaml_content("speaker_cfg_test.yaml")
-            if not result:
-                raise Exception(f"读取 YAML 文件失败: {msg}")
             duration = self.signal_info['signal_time']
             # 根据目标电压，校准并生成激励信号
             result, data, amplitude, msg = utils.generate_calibrated_signal(self.signal_info, samplerate)
             if result is False:
-                raise ValueError(f"{msg}")
-            data = cfg_filter_interface.filter_signal_with_cfg(data, samplerate, cfg)
+                self.test_state.setText("缺少输出校准文件")
+                QMessageBox.warning(self, "提示", "缺少输出校准文件，请先进行输入/输出校准。")
+                utils.set_run_button_enabled(self.run_test_button, True)
+                AudioSessionManager.release(self)
+                return
 
             input_channels = sd.query_devices(sd.default.device[0], 'input')['max_input_channels']
             output_channels = sd.query_devices(sd.default.device[1], 'output')['max_output_channels']
@@ -821,7 +820,14 @@ class MainWindow(QMainWindow):
         time_axis = np.linspace(0, duration, len(self.mic1_pa))
         self.update_time_plot(time_axis, self.mic1_pa, self.mic2_pa)
 
-        mic1_cal_data, mic2_cal_data = self.load_calibration_data()
+        try:
+            mic1_cal_data, mic2_cal_data = self.load_calibration_data()
+        except Exception:
+            self.logger.warning("缺少麦克风校准文件")
+            self.test_state.setText("缺少校准文件")
+            QMessageBox.warning(self, "提示", "缺少校准文件，请先进行麦克风校准。")
+            return
+
         lumped_inputs = self._get_lumped_parameter_inputs()
         if lumped_inputs is None:
             self.test_state.setText("参数错误")

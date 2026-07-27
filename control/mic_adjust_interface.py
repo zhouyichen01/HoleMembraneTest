@@ -348,10 +348,6 @@ class MicAdjustInterface(QDialog):
             QApplication.processEvents()
             # 获取设备采样率
             samplerate = utils.get_device_info()
-            # 这边可加入归一化
-            # result, cfg, msg = utils.get_yaml_content("speaker_cfg_cal.yaml")
-            # if not result:
-            #     raise Exception(f"读取 YAML 文件失败: {msg}")
             duration = self.signal_info['signal_time']
 
             # 根据目标电压，校准并生成激励信号

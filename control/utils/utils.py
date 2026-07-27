@@ -5,7 +5,6 @@ import sys
 
 import sounddevice as sd
 import numpy as np
-import yaml
 from PyQt5.QtWidgets import QMessageBox
 from scipy.signal import get_window, csd, welch, savgol_filter
 from scipy.fft import fft
@@ -627,19 +626,3 @@ def calculate_scale(real_spl: float, rms: float) -> float:
     scale = p / rms
     return scale
 
-def get_yaml_content(filename):
-    """
-    读取配置文件内容（YAML）。
-    参数:
-        filename (str): 配置文件名，例如 "basic_params.yaml"
-    返回:
-        - (True, config, None): 读取成功
-        - (False, None, error_message): 读取失败，附带错误信息
-    """
-    path = get_config_path(filename)
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            config = yaml.safe_load(f)
-        return True, config, None
-    except Exception as e:
-        return False, None, str(e)
