@@ -3,6 +3,7 @@ import json
 import os
 import subprocess
 import sys
+from datetime import datetime
 
 import numpy as np
 import sounddevice as sd
@@ -11,11 +12,12 @@ from PyQt5 import QtWidgets
 from PyQt5.QtCore import QFile, Qt, QTimer
 from PyQt5.QtGui import QIcon, QPixmap
 from PyQt5.QtWidgets import QApplication, QMainWindow, QGraphicsScene, QGraphicsPixmapItem, QLabel, QMessageBox, \
-    QVBoxLayout, QMenu, QAction, QFileDialog
+    QVBoxLayout, QMenu, QAction, QFileDialog, QInputDialog, QColorDialog
 from PyQt5.uic import loadUi
 from pyqtgraph import mkPen
 from scipy.signal import savgol_filter
 
+from control.config_tree_interface import ConfigTreeInterface
 from control.imp_tube_params_setting_interface import ImptubeParamsSetInterface
 from control.log_manager import LogManager
 from control.mic_adjust_interface import MicAdjustInterface
@@ -37,6 +39,7 @@ class MainWindow(QMainWindow):
         self.output_window = None
         self.mic_window = None
         self.output_voltage_window = None
+        self.config_tree_window = None
         self.signal_info = None
         self.tube_params = None
         self.test_result = None
@@ -61,6 +64,7 @@ class MainWindow(QMainWindow):
         self.init_view()
         self.load_basic_params_config()
         self.init_slider()
+        self.history_line = []
         self.crosshair_enabled = False
 
     def init_ui(self):
@@ -89,12 +93,15 @@ class MainWindow(QMainWindow):
         self.action_9.triggered.connect(self.open_mic_adjust_interface)
         self.action_6.triggered.disconnect()
         self.action_6.triggered.connect(self.open_output_voltage_interface)
+        self.action_8.triggered.disconnect()
+        self.action_8.triggered.connect(self.open_config_tree_interface)
         self.action_14.triggered.disconnect()
         self.action_14.triggered.connect(self.popup_pdf)
         self.run_test_button.clicked.connect(self.run_test)
         self.save_test_data.triggered.disconnect()
         self.save_test_data.triggered.connect(self.save_test_data_to_excel)
         self.plot_type_selector.currentIndexChanged.connect(self.update_plot3_by_selector)
+        sign.update_plot3_by_selector_sign.connect(self.update_plot3_by_selector)
 
     def only_view_all_menu(self):
         def context_menu(event):
@@ -156,8 +163,8 @@ class MainWindow(QMainWindow):
         layout3.addWidget(self.plot3)
         self.frame_3.setLayout(layout3)
         self.plot3.setBackground('white')
-        self.plot3.setMenuEnabled(False) # 禁用菜单
-        self.only_view_all_menu()
+        self.plot3.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.plot3.customContextMenuRequested.connect(self.on_plot3_menu)
 
         self.plot3.getAxis('bottom').enableAutoSIPrefix(False)
         self.plot3.getAxis('left').enableAutoSIPrefix(False) # 禁用自动转换单位
@@ -257,6 +264,163 @@ class MainWindow(QMainWindow):
                 f"<b>幅值(y):</b> {y_lin:.4f}</div>"
             )
             self.text.setPos(x_log, y_log)
+
+    def on_plot3_menu(self, pos):
+        menu = QMenu(self)
+
+        view_all_action = QAction("View All", self)
+        view_all_action.triggered.connect(lambda: self.plot3.plotItem.enableAutoRange())
+        menu.addAction(view_all_action)
+
+        save_action = QAction("保存当前曲线", self)
+        save_action.triggered.connect(self.save_test_result_to_json)
+        menu.addAction(save_action)
+
+        menu.exec_(self.plot3.mapToGlobal(pos))
+
+    def save_test_result_to_json(self):
+        if not self.test_result:
+            QMessageBox.warning(self, "提示", "无测试结果，请先进行测试！")
+            return
+
+        default_name = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        name, ok = QInputDialog.getText(self, "保存历史线名称", "请输入名称：", text=default_name)
+        if not ok:
+            return
+        name = name.strip()
+        if not name:
+            QMessageBox.warning(self, "提示", "名称不能为空！")
+            return
+
+        color = QColorDialog.getColor(parent=self, title="选择颜色")
+        if not color.isValid():
+            return
+        colour_str = color.name()
+
+        content = self._read_tree_config()
+        line_cfg = self._ensure_tree_line_config(content)
+        new_index = len(line_cfg["manage_history_line"])
+        if new_index >= 10:
+            QMessageBox.warning(self, "提示", "历史数据已达 10 条，请先删除后再保存。")
+            return
+
+        line_cfg["saved_history_line"].append(self._json_safe(self.test_result))
+        line_cfg["manage_history_line"][str(new_index)] = {
+            "state": "True",
+            "colour": colour_str,
+            "line_name": name,
+        }
+
+        if utils.write_config_content("tree_config.json", content):
+            QMessageBox.information(self, "成功", f"已保存历史线：{name}\n颜色：{colour_str}")
+            if self.config_tree_window and self.config_tree_window.isVisible():
+                self.config_tree_window.fill_page_2()
+            self.update_plot3_by_selector()
+            QApplication.processEvents()
+        else:
+            QMessageBox.critical(self, "错误", "写入 tree_config.json 失败，请重试。")
+
+    @staticmethod
+    def _json_safe(value):
+        if isinstance(value, np.ndarray):
+            return value.tolist()
+        if isinstance(value, np.generic):
+            return value.item()
+        if isinstance(value, dict):
+            return {key: MainWindow._json_safe(val) for key, val in value.items()}
+        if isinstance(value, (list, tuple)):
+            return [MainWindow._json_safe(val) for val in value]
+        return value
+
+    @staticmethod
+    def _default_tree_config():
+        return {
+            "line": {
+                "is_display_history_line": 1,
+                "manage_history_line": {},
+                "saved_history_line": [],
+            }
+        }
+
+    def _read_tree_config(self):
+        res, content = utils.get_config_content("tree_config.json")
+        if not res or not isinstance(content, dict):
+            content = self._default_tree_config()
+        self._ensure_tree_line_config(content)
+        return content
+
+    def _ensure_tree_line_config(self, content):
+        line_cfg = content.setdefault("line", {})
+        line_cfg.setdefault("is_display_history_line", 1)
+        line_cfg.setdefault("manage_history_line", {})
+        line_cfg.setdefault("saved_history_line", [])
+        return line_cfg
+
+    def _get_plot3_display_data(self, result):
+        text = self.plot_type_selector.currentText()
+        f = np.asarray(result["f"], dtype=float)
+
+        if "abs" in text:
+            y = np.asarray(result["Z_abs"], dtype=float)
+        elif "Re" in text:
+            y = np.abs(np.asarray(result["Z_Re"], dtype=float))
+        elif "Im" in text:
+            y = np.abs(np.asarray(result["Z_Im"], dtype=float))
+        else:
+            raise ValueError(f"未知曲线类型：{text}")
+
+        log_f = np.log10(f)
+        y = y.copy()
+        y[y <= 0] = np.nan
+        log_y = np.log10(y)
+        if self.soft_value > 3:
+            log_y = savgol_filter(log_y, window_length=self.soft_value, polyorder=3)
+        return log_f, log_y
+
+    def _clear_history_lines(self):
+        for line in getattr(self, "history_line", []):
+            try:
+                self.legend.removeItem(line)
+            except Exception:
+                pass
+            try:
+                self.plot3.removeItem(line)
+            except Exception:
+                pass
+        self.history_line = []
+
+    def update_history_lines(self):
+        content = self._read_tree_config()
+        line_cfg = self._ensure_tree_line_config(content)
+        if int(line_cfg.get("is_display_history_line", 1)) == 0:
+            return
+
+        saved_lines = line_cfg.get("saved_history_line", [])
+        id_list = []
+        for key, cfg in line_cfg.get("manage_history_line", {}).items():
+            if str(cfg.get("state", "False")) != "True":
+                continue
+            try:
+                index = int(key)
+            except Exception:
+                self.logger.warning(f"历史线索引无法转换为 int: {key}")
+                continue
+            if 0 <= index < len(saved_lines):
+                id_list.append((index, cfg.get("colour", "#1f77b4"), cfg.get("line_name", f"历史线{index}")))
+        id_list.sort()
+
+        for index, colour, line_name in id_list:
+            self.add_history_line(colour, saved_lines[index], line_name)
+
+    def add_history_line(self, colour, original_data, line_name):
+        try:
+            log_f, log_y = self._get_plot3_display_data(original_data)
+        except Exception as exc:
+            self.logger.warning(f"历史线 {line_name} 数据无法绘制: {exc}")
+            return
+
+        item = self.plot3.plot(log_f, log_y, pen=mkPen(color=colour, width=1), name=line_name)
+        self.history_line.append(item)
 
     def mov(self, pos):
         if self.plot3.sceneBoundingRect().contains(pos):
@@ -408,6 +572,13 @@ class MainWindow(QMainWindow):
         self.output_voltage_window.raise_()
         self.output_voltage_window.activateWindow()
 
+    def open_config_tree_interface(self):
+        if self.config_tree_window is None:
+            self.config_tree_window = ConfigTreeInterface(self)
+        self.config_tree_window.show()
+        self.config_tree_window.raise_()
+        self.config_tree_window.activateWindow()
+
     def init_config(self):
         output_path = utils.get_config_path("output_signal_setting.json")
         try:
@@ -481,7 +652,10 @@ class MainWindow(QMainWindow):
         self.record_and_plot()
 
     def clear_plot3_result(self):
-        self.plot3.clear()
+        self.curve3.setData([], [])
+        self._clear_history_lines()
+        if self.crosshair_enabled:
+            self.del_cross()
         self.test_result = None
         self.plot_state = False
         self.crosshair_enabled = False
@@ -780,7 +954,43 @@ class MainWindow(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, "错误", f"保存失败：{str(e)}")
 
-    def update_plot3_by_selector(self):
+    def update_plot3_by_selector(self, source=None):
+        text = self.plot_type_selector.currentText()
+        if "abs" in text:
+            self.plot3.setLabel('left', 'Z abs', units='Rayl')
+        elif "Re" in text:
+            self.plot3.setLabel('left', 'Z Re', units='Rayl')
+        elif "Im" in text:
+            self.plot3.setLabel('left', 'Z Im', units='Rayl')
+        else:
+            QMessageBox.warning(self, "提示", f"无{text}选项")
+            return
+
+        if not self.test_result:
+            if source == "config_tree":
+                return
+            QMessageBox.warning(self, "提示", "无测试结果，请先进行测试！")
+            return
+
+        self._clear_history_lines()
+        if self.crosshair_enabled:
+            self.del_cross()
+
+        try:
+            self.plot3.scene().sigMouseClicked.disconnect(self.on_plot3_clicked)
+        except Exception:
+            pass
+        self.plot3.scene().sigMouseClicked.connect(self.on_plot3_clicked)
+
+        log_f, log_y = self._get_plot3_display_data(self.test_result)
+        self.curve3.setData(log_f, log_y)
+        self.curve3.show()
+
+        self.plot3.plotItem.enableAutoRange(axis='xy', enable=True)
+        self.plot_state = True
+        self.update_history_lines()
+
+    def _legacy_update_plot3_by_selector(self):
         """
         根据平滑值来重新画图
         """

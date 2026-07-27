@@ -281,7 +281,8 @@ def copy_all_configs_to_base_dir():
         "output_signal_setting.json",
         "basic_params.json",
         "calibration_coefficients.json",
-        "mic_calibration.json"
+        "mic_calibration.json",
+        "tree_config.json"
     ]
 
     for filename in json_files:

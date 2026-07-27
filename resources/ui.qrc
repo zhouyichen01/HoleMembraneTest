@@ -7,5 +7,6 @@
         <file>ui/mic_adjust.ui</file>
         <file>ui/output_voltage_cal.ui</file>
         <file>ui/select_device.ui</file>
+        <file>ui/tree_config.ui</file>
     </qresource>
 </RCC>

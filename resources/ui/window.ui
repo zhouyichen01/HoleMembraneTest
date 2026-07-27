@@ -267,6 +267,8 @@ font: bold 12pt &quot;Microsoft YaHei&quot;;  /* 使字体加粗 */</string>
     <addaction name="separator"/>
     <addaction name="action_3"/>
     <addaction name="separator"/>
+    <addaction name="action_8"/>
+    <addaction name="separator"/>
    </widget>
    <widget class="QMenu" name="menu_2">
     <property name="title">
@@ -366,6 +368,11 @@ font: bold 12pt &quot;Microsoft YaHei&quot;;  /* 使字体加粗 */</string>
   <action name="action_6">
    <property name="text">
     <string>输入/输出校准</string>
+   </property>
+  </action>
+  <action name="action_8">
+   <property name="text">
+    <string>配置树</string>
    </property>
   </action>
  </widget>

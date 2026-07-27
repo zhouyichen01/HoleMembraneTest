@@ -12,6 +12,7 @@ class MySignals(QObject):
     success_message_signal = pyqtSignal(str, object)
     warning_message_signal = pyqtSignal(str, object)
     update_plot_sign = pyqtSignal(np.ndarray, np.ndarray, np.ndarray, int)
+    update_plot3_by_selector_sign = pyqtSignal(str)
 
 
 sign = MySignals()
