@@ -165,11 +165,13 @@ class MainWindow(QMainWindow):
         self.plot3.setBackground('white')
         self.plot3.setContextMenuPolicy(Qt.CustomContextMenu)
         self.plot3.customContextMenuRequested.connect(self.on_plot3_menu)
+        # 禁用 pyqtgraph 原生右键菜单，只保留自定义菜单
+        self.plot3.plotItem.setMenuEnabled(False)
 
         self.plot3.getAxis('bottom').enableAutoSIPrefix(False)
         self.plot3.getAxis('left').enableAutoSIPrefix(False) # 禁用自动转换单位
         self.plot3.getAxis('bottom').setLogMode(True)  # 对数坐标轴，适用于频率
-        self.plot3.getAxis('left').setLogMode(True)
+        self.plot3.getAxis('left').setLogMode(False)  # 纵轴线性，负值可直接显示
         # 使用自定义的对数坐标轴刻度标签格式
         self.plot3.getAxis('bottom').logTickStrings = utils.custom_log_tick_strings
         # self.plot3.getAxis('bottom').setTickSpacing(levels=[(1, 1)])
@@ -201,24 +203,19 @@ class MainWindow(QMainWindow):
 
             plot_type = self.plot_type_selector.currentText()
 
-            def safe_log(a):
-                a = np.asarray(a, dtype=float)
-                a[a <= 0] = np.nan  # 防止取对数报错
-                return np.log10(a)
-
             if plot_type == "传输阻抗率Z abs":
                 # 获取当前显示的曲线数据
                 freq_array = np.asarray(self.test_result["f"], dtype=float)
                 y_array = self.test_result["Z_abs"]
             elif plot_type == "传输阻抗率Z Re":
                 freq_array = np.asarray(self.test_result["f"], dtype=float)
-                y_array = np.abs(self.test_result["Z_Re"])
+                y_array = self.test_result["Z_Re"]
             elif plot_type == "传输阻抗率Z Im":
                 freq_array = np.asarray(self.test_result["f"], dtype=float)
-                y_array = np.abs(self.test_result["Z_Im"])
+                y_array = self.test_result["Z_Im"]
             else:
                 return
-            y_disp = safe_log(y_array)
+            y_disp = np.asarray(y_array, dtype=float).copy()
             x_disp = np.log10(freq_array)
             # 如果启用了平滑处理
             if self.soft_value > 3:
@@ -226,9 +223,10 @@ class MainWindow(QMainWindow):
             # 找出频率中最接近点击频率的点
             index = np.abs(freq_array - freq_clicked).argmin()
             x_log = float(x_disp[index])  # 显示坐标（log10 频率）
-            y_log = float(y_disp[index])  # 显示坐标（log10 幅值）
+            y_log = float(y_disp[index])  # 显示坐标（纵轴线性，即原值）
             x_lin = float(freq_array[index])  # 线性频率x
-            y_lin = float(10 ** y_disp[index]) # 线性幅值y, 根据对数平滑生成的,而非原始数据
+            # 幅值y, 取平滑后的显示数据, 而非原始数据
+            y_lin = float(y_disp[index])
 
             self.logger.info(f"双击事件: 频率(x): {freq_clicked:.2f} Hz, 最近数据索引: {index}")
             self.logger.info(f"对数频率位置: {x_log:.4f}), 对数幅值位置: {y_log:.4f}")
@@ -363,19 +361,17 @@ class MainWindow(QMainWindow):
         if "abs" in text:
             y = np.asarray(result["Z_abs"], dtype=float)
         elif "Re" in text:
-            y = np.abs(np.asarray(result["Z_Re"], dtype=float))
+            y = np.asarray(result["Z_Re"], dtype=float)
         elif "Im" in text:
-            y = np.abs(np.asarray(result["Z_Im"], dtype=float))
+            y = np.asarray(result["Z_Im"], dtype=float)
         else:
             raise ValueError(f"未知曲线类型：{text}")
 
         log_f = np.log10(f)
-        y = y.copy()
-        y[y <= 0] = np.nan
-        log_y = np.log10(y)
+        disp_y = y.copy()
         if self.soft_value > 3:
-            log_y = savgol_filter(log_y, window_length=self.soft_value, polyorder=3)
-        return log_f, log_y
+            disp_y = savgol_filter(disp_y, window_length=self.soft_value, polyorder=3)
+        return log_f, disp_y
 
     def _clear_history_lines(self):
         for line in getattr(self, "history_line", []):
@@ -428,13 +424,13 @@ class MainWindow(QMainWindow):
             x = mouse_point.x()
             y = mouse_point.y()
             real_x = 10 ** x
-            real_y = 10 ** y
+            real_y = y  # 纵轴线性，无需换算
             threshold = 1e10
             if real_x > threshold:
                 x_str = "∞"
             else:
                 x_str = f"{real_x:.2f}"
-            if real_y > threshold:
+            if abs(real_y) > threshold:
                 y_str = "∞"
             else:
                 y_str = f"{real_y:.2f}"
@@ -921,26 +917,15 @@ class MainWindow(QMainWindow):
         # 获取原始数据
         line_f = self.test_result["f"]
 
-        # 线性==>对数
-        def safe_abs_log(data):
-            data = np.abs(np.asarray(data, dtype=float)).copy()
-            data[data <= 0] = np.nan
-            return np.log10(data)
+        # 与绘图逻辑一致：全部在线性域平滑，保留符号
+        Z_abs = np.asarray(self.test_result["Z_abs"], dtype=float).copy()
+        Z_Re = np.asarray(self.test_result["Z_Re"], dtype=float).copy()
+        Z_Im = np.asarray(self.test_result["Z_Im"], dtype=float).copy()
 
-        log_Z_abs = safe_abs_log(self.test_result["Z_abs"])
-        log_Z_Re = safe_abs_log(self.test_result["Z_Re"])
-        log_Z_Im = safe_abs_log(self.test_result["Z_Im"])
-
-        # 应用Savitzky-Golay滤波器对对数数据进行平滑
         if self.soft_value > 3:
-            log_Z_abs = savgol_filter(log_Z_abs, window_length=self.soft_value, polyorder=3)
-            log_Z_Re = savgol_filter(log_Z_Re, window_length=self.soft_value, polyorder=3)
-            log_Z_Im = savgol_filter(log_Z_Im, window_length=self.soft_value, polyorder=3)
-
-        # 对数==>线性
-        Z_abs = 10 ** log_Z_abs
-        Z_Re = 10 ** log_Z_Re
-        Z_Im = 10 ** log_Z_Im
+            Z_abs = savgol_filter(Z_abs, window_length=self.soft_value, polyorder=3)
+            Z_Re = savgol_filter(Z_Re, window_length=self.soft_value, polyorder=3)
+            Z_Im = savgol_filter(Z_Im, window_length=self.soft_value, polyorder=3)
 
         save_dir = QFileDialog.getExistingDirectory(self, "选择保存文件夹")
         if not save_dir:

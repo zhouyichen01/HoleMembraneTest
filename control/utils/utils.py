@@ -194,8 +194,8 @@ def calculate_impedance_Lumped_parameter(
     mic2_cal = np.asarray(mic2_cal, dtype=float).reshape(-1)[:min_len]
     mic1_cal = np.asarray(mic1_cal, dtype=float).reshape(-1)[:min_len]
 
-    # 频率参数
-    nfft = 1024
+    # 频率参数（与离线脚本一致：短分段、多次平均，降低谱估计方差）
+    nfft = min(1024, min_len)
     w = np.hanning(nfft)
     noverlap = nfft // 2
 
@@ -625,4 +625,3 @@ def calculate_scale(real_spl: float, rms: float) -> float:
     p = 20e-6 * 10 ** (real_spl / 20)
     scale = p / rms
     return scale
-
