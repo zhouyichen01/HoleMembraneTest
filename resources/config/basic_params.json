@@ -1,13 +1,13 @@
 {
     "basic_params": {
         "soft_value": 0,
-        "input_selected_device_id": 9,
-        "input_selected_device_name": "麦克风 (Dongyuan 6CH Microphone/Line ADC)",
+        "input_selected_device_id": 34,
+        "input_selected_device_name": "IN 1-4 (5- BEHRINGER UMC 404HD 192k)",
         "input_selected_device_type": "Windows WASAPI",
         "input_selected_device_samplerate": "48000",
-        "input_channel_count": 6,
-        "output_selected_device_id": 8,
-        "output_selected_device_name": "扬声器 (Dongyuan Speaker)",
+        "input_channel_count": 4,
+        "output_selected_device_id": 28,
+        "output_selected_device_name": "OUT 1-2 (5- BEHRINGER UMC 404HD 192k)",
         "output_selected_device_type": "Windows WASAPI",
         "output_selected_device_samplerate": "48000",
         "is_clear": 0

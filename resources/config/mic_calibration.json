@@ -14,13 +14,5 @@
     "In4": {
         "deviation_value": "0",
         "binding_index": 3
-    },
-    "In5": {
-        "deviation_value": "0",
-        "binding_index": 4
-    },
-    "In6": {
-        "deviation_value": "0",
-        "binding_index": 5
     }
 }

@@ -45,7 +45,7 @@ def calculate_impedance_Lumped_parameter(
     mic1_cal = np.asarray(mic1_cal, dtype=float).reshape(-1)[:min_len]
 
     # 频率参数
-    nfft = 1024
+    nfft = sf
     w = np.hanning(nfft)
     noverlap = nfft // 2
 
