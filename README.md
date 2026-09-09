@@ -2,4 +2,4 @@
 # pyrcc5 resources/ui.qrc -o resources/ui_rc.py
 # pyrcc5 resources/icons.qrc -o resources/icons_rc.py
 # 一键化项目打包
-# pyinstaller main.spec
+# # python.exe -m PyInstaller --clean --noconfirm main.spec
