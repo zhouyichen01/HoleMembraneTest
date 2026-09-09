@@ -6,8 +6,7 @@ import numpy as np
 import sounddevice as sd
 
 from PyQt5.QtCore import QFile, Qt, QTimer
-from PyQt5.QtGui import QPixmap
-from PyQt5.QtWidgets import QDialog, QGraphicsScene, QGraphicsPixmapItem, QMessageBox, QVBoxLayout, QApplication
+from PyQt5.QtWidgets import QDialog, QMessageBox, QVBoxLayout, QApplication
 from PyQt5.uic import loadUi
 from pyqtgraph import mkPen
 
@@ -219,19 +218,20 @@ class MicAdjustInterface(QDialog):
                 self.target_voltage_value.setText("0.01")
 
     def init_images(self):
-        scene = QGraphicsScene()
-        pixmap = QPixmap(":/images/2mic薄层校准_画板.png")
-        scaled_pixmap = pixmap.scaled(400, 300, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-        pixmap_item = QGraphicsPixmapItem(scaled_pixmap)
-        scene.addItem(pixmap_item)
-        self.graphicsView.setScene(scene)
-
-        scene_2 = QGraphicsScene()
-        pixmap_2 = QPixmap(":/images/2mic薄层_画板.png")
-        scaled_pixmap_2 = pixmap_2.scaled(400, 300, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-        pixmap_item_2 = QGraphicsPixmapItem(scaled_pixmap_2)
-        scene_2.addItem(pixmap_item_2)
-        self.graphicsView_2.setScene(scene_2)
+        utils.set_clickable_graphics_image(
+            parent=self,
+            view=self.graphicsView,
+            image_path=":/images/2mic薄层校准_画板.png",
+            preview_size=(400, 300),
+            title="校准图片预览",
+        )
+        utils.set_clickable_graphics_image(
+            parent=self,
+            view=self.graphicsView_2,
+            image_path=":/images/2mic薄层_画板.png",
+            preview_size=(400, 300),
+            title="阻抗管图片预览",
+        )
 
     def init_view(self):
         # Mic1 - Time

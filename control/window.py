@@ -10,8 +10,8 @@ import sounddevice as sd
 import pyqtgraph
 from PyQt5 import QtWidgets
 from PyQt5.QtCore import QFile, Qt, QTimer
-from PyQt5.QtGui import QIcon, QPixmap
-from PyQt5.QtWidgets import QApplication, QMainWindow, QGraphicsScene, QGraphicsPixmapItem, QLabel, QMessageBox, \
+from PyQt5.QtGui import QIcon
+from PyQt5.QtWidgets import QApplication, QMainWindow, QLabel, QMessageBox, \
     QVBoxLayout, QMenu, QAction, QFileDialog, QInputDialog, QColorDialog
 from PyQt5.uic import loadUi
 from pyqtgraph import mkPen
@@ -119,12 +119,13 @@ class MainWindow(QMainWindow):
         self.plot3.plotItem.scene().contextMenuEvent = context_menu
 
     def init_image(self):
-        scene = QGraphicsScene()
-        pixmap = QPixmap(":/images/2mic薄层_画板.png")
-        scaled_pixmap = pixmap.scaled(600, 400, Qt.KeepAspectRatio, Qt.SmoothTransformation)  # 缩小图像
-        pixmap_item = QGraphicsPixmapItem(scaled_pixmap)
-        scene.addItem(pixmap_item)
-        self.schematic1.setScene(scene)
+        utils.set_clickable_graphics_image(
+            parent=self,
+            view=self.schematic1,
+            image_path=":/images/2mic薄层_画板.png",
+            preview_size=(600, 400),
+            title="首页图片预览",
+        )
         # 获取主界面的布局并设置内容的边距
         layout = self.centralWidget().layout()  # 获取 QMainWindow 的中心控件的布局
         if layout:

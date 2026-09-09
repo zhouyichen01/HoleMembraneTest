@@ -1,8 +1,7 @@
 import json
 
 from PyQt5.QtCore import QFile, Qt
-from PyQt5.QtGui import QPixmap
-from PyQt5.QtWidgets import QDialog, QGraphicsScene, QGraphicsPixmapItem, QMessageBox
+from PyQt5.QtWidgets import QDialog, QMessageBox
 from PyQt5.uic import loadUi
 
 from control.log_manager import LogManager
@@ -34,13 +33,13 @@ class ImptubeParamsSetInterface(QDialog):
         self.logger.info("打开阻抗管参数设置界面")
 
     def init_images(self):
-        # 加载图片
-        scene = QGraphicsScene()
-        pixmap = QPixmap(":/images/2mic薄层_画板.png")
-        scaled_pixmap = pixmap.scaled(390, 282, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-        pixmap_item = QGraphicsPixmapItem(scaled_pixmap)
-        scene.addItem(pixmap_item)
-        self.graphicsView.setScene(scene)
+        utils.set_clickable_graphics_image(
+            parent=self,
+            view=self.graphicsView,
+            image_path=":/images/2mic薄层_画板.png",
+            preview_size=(390, 282),
+            title="参数设置图片预览",
+        )
 
     def init_fun(self):
         self.save_button.clicked.connect(self.save)

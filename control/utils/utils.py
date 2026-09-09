@@ -5,7 +5,16 @@ import sys
 
 import sounddevice as sd
 import numpy as np
-from PyQt5.QtWidgets import QMessageBox
+from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QPixmap
+from PyQt5.QtWidgets import (
+    QLabel,
+    QMessageBox,
+    QDialog,
+    QGraphicsPixmapItem,
+    QGraphicsScene,
+    QVBoxLayout,
+)
 from scipy.signal import get_window, csd, welch, savgol_filter
 from scipy.fft import fft
 
@@ -66,6 +75,56 @@ def is_float(str):
         return True
     except ValueError:
         return False
+
+def show_image_popup(parent, image_path, title="图片预览", popup_size=(820, 560)):
+    # 加载要弹出的原始图片。
+    pixmap = QPixmap(image_path)
+    if pixmap.isNull():
+        QMessageBox.warning(parent, "提示", "图片加载失败！")
+        return
+
+    # 按最大宽高缩放，保持原图比例不变。
+    pixmap = pixmap.scaled(popup_size[0], popup_size[1], Qt.KeepAspectRatio, Qt.SmoothTransformation)
+
+    # 创建一个简单弹窗，把缩放后的图片放进去。
+    dialog = QDialog(parent)
+    dialog.setWindowTitle(title)
+
+    image_label = QLabel(dialog)
+    image_label.setAlignment(Qt.AlignCenter)
+    image_label.setPixmap(pixmap)
+
+    layout = QVBoxLayout(dialog)
+    layout.setContentsMargins(8, 8, 8, 8)
+    layout.addWidget(image_label)
+
+    dialog.resize(pixmap.width() + 20, pixmap.height() + 20)
+    dialog.exec_()
+
+def set_clickable_graphics_image(parent, view, image_path, preview_size, title="图片预览", popup_size=(820, 560)):
+    # 先在界面上的 QGraphicsView 里显示缩略图。
+    pixmap = QPixmap(image_path)
+    if pixmap.isNull():
+        QMessageBox.warning(parent, "提示", "图片加载失败！")
+        return
+
+    scene = QGraphicsScene(view)
+    scene.addItem(QGraphicsPixmapItem(pixmap.scaled(preview_size[0], preview_size[1],
+                                                    Qt.KeepAspectRatio, Qt.SmoothTransformation)))
+    view.setScene(scene)
+    view.setCursor(Qt.PointingHandCursor)
+    view.setToolTip("点击查看大图")
+
+    # 鼠标左键点击缩略图时，弹出大图窗口。
+    original_mouse_press_event = view.mousePressEvent
+
+    def mouse_press_event(event):
+        if event.button() == Qt.LeftButton:
+            show_image_popup(parent, image_path, title, popup_size)
+        else:
+            original_mouse_press_event(event)
+
+    view.mousePressEvent = mouse_press_event
 
 def show_error_message(msg: str, parent=None) -> None:
     """
