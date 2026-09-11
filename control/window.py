@@ -250,7 +250,6 @@ class MainWindow(QMainWindow):
         y_disp = np.asarray(y_array, dtype=float).copy()
         x_disp = np.log10(freq_array)
         print("x轴点位:", freq_array.tolist())
-        print("x轴log点位:", x_disp.tolist())
         # 如果启用了平滑处理
         if self.soft_value > 3:
             y_disp = savgol_filter(y_disp, window_length=self.soft_value, polyorder=3)
