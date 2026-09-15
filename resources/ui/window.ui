@@ -372,7 +372,7 @@ font: bold 12pt &quot;Microsoft YaHei&quot;;  /* 使字体加粗 */</string>
   </action>
   <action name="action_8">
    <property name="text">
-    <string>配置树</string>
+    <string>历史数据设置</string>
    </property>
   </action>
  </widget>
