@@ -24,6 +24,42 @@ from custom.running_consts import base_dir, DEFAULT_DIR
 
 utils_logger = LogManager.set_log_handler("core")
 
+
+def get_screen_metrics(screen=None):
+    """Return the current screen's size, available area, DPI and scale factor."""
+    app = QApplication.instance()
+    if app is None:
+        raise RuntimeError("QApplication must be created before reading screen metrics")
+
+    screen = screen or app.primaryScreen()
+    if screen is None:
+        raise RuntimeError("No available screen was detected")
+
+    geometry = screen.geometry()
+    available = screen.availableGeometry()
+    return {
+        "name": screen.name(),
+        "width": geometry.width(),
+        "height": geometry.height(),
+        "available_width": available.width(),
+        "available_height": available.height(),
+        "logical_dpi": round(screen.logicalDotsPerInch(), 2),
+        "device_pixel_ratio": screen.devicePixelRatio(),
+    }
+
+
+def get_font_size_for_resolution(width, height):
+    """Choose a readable point size from the screen's shorter edge."""
+    short_side = min(int(width), int(height))
+    if short_side <= 768:
+        return 10
+    if short_side <= 1080:
+        return 12
+    if short_side <= 1440:
+        return 14
+    return 16
+
+
 def set_adjust_button_enabled(button, enabled: bool):
     button.setEnabled(enabled)
     if enabled:

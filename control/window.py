@@ -75,6 +75,7 @@ class MainWindow(QMainWindow):
         ui_file = QFile(":ui/window.ui")
         ui_file.open(QFile.ReadOnly)
         loadUi(ui_file, self)
+        self.apply_resolution_font_sizes()
         # 设置窗口标题和大小
         self.setWindowTitle('小孔膜片阻抗管测试系统')
         self.showMaximized()
@@ -85,6 +86,27 @@ class MainWindow(QMainWindow):
         layout = self.centralWidget().layout()  # 获取 QMainWindow 的中心控件的布局
         if layout:
             layout.setContentsMargins(1, 1, 1, 1)
+
+    def apply_resolution_font_sizes(self):
+        screen = QApplication.primaryScreen()
+        metrics = utils.get_screen_metrics(screen)
+        font_size = utils.get_font_size_for_resolution(
+            metrics["width"], metrics["height"]
+        )
+        print(
+            f"[Font] plot_type_selector={font_size}pt "
+            f"(screen={metrics['width']}x{metrics['height']})"
+        )
+
+        # 同时设置下拉框当前文本和展开列表的字号。
+        self.plot_type_selector.setStyleSheet(f"""
+            QComboBox {{
+                font: bold {font_size}pt "Microsoft YaHei";
+            }}
+            QComboBox QAbstractItemView {{
+                font: bold {font_size}pt "Microsoft YaHei";
+            }}
+        """)
 
     def init_fun(self):
         self.action_2.triggered.disconnect()
