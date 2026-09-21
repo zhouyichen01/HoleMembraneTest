@@ -24,6 +24,8 @@ from custom.running_consts import base_dir, DEFAULT_DIR
 
 utils_logger = LogManager.set_log_handler("core")
 
+trim_time = 0.2
+
 
 def get_screen_metrics(screen=None):
     """Return the current screen's size, available area, DPI and scale factor."""
@@ -652,6 +654,18 @@ def safe_log(a):
     a = np.asarray(a, dtype=float)
     a[a <= 0] = np.nan  # 防止取对数报错
     return np.log10(a)
+
+
+def trim_start_samples(recording, samplerate):
+    """
+    多录 trim_time 后，统一裁掉开头，避免启动瞬间爆音参与计算和保存。
+    """
+    trim_samples = int(round(trim_time * samplerate))
+    if recording is None or trim_samples <= 0:
+        return recording
+    if recording.shape[0] <= trim_samples:
+        return recording[:0]
+    return recording[trim_samples:]
 
 def generate_calibrated_signal(signal_info, samplerate):
     """

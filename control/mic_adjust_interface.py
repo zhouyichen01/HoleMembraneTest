@@ -48,9 +48,9 @@ class MicAdjustInterface(QDialog):
 
         # 1) 处理队列：把回调线程塞进来的 chunk 取出来
         chunks = self.stream_instance.process_queue()
+        sr = self.stream_instance.sample_rate
         if chunks:
             # 2) 实时显示：只画最近 N 秒（避免越画越卡）
-            sr = self.stream_instance.sample_rate
             duration = float(self.signal_info.get("signal_time", 5))
             keep_sr = int(duration * sr)
 
@@ -58,18 +58,32 @@ class MicAdjustInterface(QDialog):
             new_block = np.vstack(chunks)  # (k,4)
             self.streaming_buffer.append(new_block)  # 用 list 装块更快
             buf = np.vstack(self.streaming_buffer)
-            if buf.shape[0] > keep_sr:
-                buf = buf[-keep_sr:, :]
-                self.streaming_buffer = [buf]  # 只保留一块，避免 list 无限增长
 
-            # 时间轴：用累计样本数推算起点
-            total_samples = self.stream_instance.samples_captured
-            start_sample = max(0, total_samples - buf.shape[0])
-            time_axis = (start_sample + np.arange(buf.shape[0])) / sr
+            # 把 200ms 换算成采样点数；例如 48000Hz 下，0.2s 就是 9600 个点。
+            trim_samples = int(round(utils.trim_time * sr))
 
-            # 只做“时域实时更新”
-            pa1, pa2 = MicAdjustInterface.process_chunks(buf, self.mic_binding, self.mic_deviation_db)
-            self.update_time_plot(time_axis, pa1, pa2)
+            # 实时图最多显示 signal_time 秒；因为后面要裁掉 200ms, 所以缓存先多留 200ms ！！！一般用不到！！！
+            if buf.shape[0] > keep_sr + trim_samples:
+                buf = buf[-(keep_sr + trim_samples):, :]
+                self.streaming_buffer = [buf]
+
+            # 已经录够 200ms 后，从这个累计缓存里buf裁掉最前面的 200ms。
+            if buf.shape[0] > trim_samples:
+                buf = buf[trim_samples:, :]
+            # 还没录够 200ms 时先显示空数据，这样启动爆音不会画到界面上。
+            else:
+                buf = buf[:0, :]
+
+            # 裁完后有数据才更新曲线；没数据就等下一次定时器刷新。
+            if buf.shape[0] > 0:
+                # 时间轴按裁掉开头后的数据从 0 秒开始显示。
+                total_samples = max(0, self.stream_instance.samples_captured - trim_samples)
+                start_sample = max(0, total_samples - buf.shape[0])
+                time_axis = (start_sample + np.arange(buf.shape[0])) / sr
+
+                # 只做“时域实时更新”
+                pa1, pa2 = MicAdjustInterface.process_chunks(buf, self.mic_binding, self.mic_deviation_db)
+                self.update_time_plot(time_axis, pa1, pa2)
 
         #3) 录音结束：录音停止-> stream停timer-> 收集结果(recording/err)-> stop/释放stream-> (FFT/保存/画图)-> 恢复按钮&释放占用锁
         if not self.stream_instance.is_recording:
@@ -107,6 +121,11 @@ class MicAdjustInterface(QDialog):
         """
         self.logger.info("录音完成(流式),开始处理音频数据")
         self.logger.info(f"recording shape: {getattr(recording, 'shape', None)}")
+
+        recording = utils.trim_start_samples(recording, samplerate)
+        self.logger.info(f"已裁掉开头 {utils.trim_time * 1000:.0f} ms, recording shape: {getattr(recording, 'shape', None)}")
+        if recording.shape[0] == 0:
+            raise ValueError("裁剪后录音数据为空，请检查录音时长和采样率设置。")
 
         # 1) 处理录音数据（拆通道 + 计算 real_spl/scale）
         (mic1_data, mic2_data, real_spl1, real_spl2, scale1, scale2) = MicAdjustInterface.process_mic_channels_data(
@@ -370,6 +389,17 @@ class MicAdjustInterface(QDialog):
             stimulus_data = np.asarray(data, dtype=np.float32)
             if output_channels > 1:
                 stimulus_data = np.column_stack([stimulus_data] * output_channels)
+            # 单通道时数据是 (N,)，补静音要拼成 (N, channels)，所以转成 (N, 1)。
+            if stimulus_data.ndim == 1:
+                stimulus_data = stimulus_data.reshape(-1, 1)
+
+            # 开头补 200ms 静音，录制总时长也增加 200ms；
+            # 后处理时裁掉这段开头数据，避免启动瞬间爆音进入校准结果。
+            trim_samples = int(round(utils.trim_time * samplerate))
+            if trim_samples > 0:
+                silence = np.zeros((trim_samples, int(output_channels)), dtype=np.float32)
+                stimulus_data = np.vstack([silence, stimulus_data])
+            record_duration = float(duration) + utils.trim_time
 
             self.logger.info("开始播放并录音...")
             # 读设备（你已经保存到 basic_params.json）
@@ -386,7 +416,7 @@ class MicAdjustInterface(QDialog):
                 output_device=output_device,
                 input_channels=int(input_channels),
                 output_channels=int(output_channels),
-                duration=duration,  # 你没有 prepare/prolong 就用 duration
+                duration=record_duration,
                 blocksize=2048,
             )
             self.stream_timer.start(50)  # 50ms 刷一次队列/判断结束
