@@ -19,13 +19,13 @@
      <item>
       <widget class="QLabel" name="label_5">
        <property name="sizePolicy">
-        <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+        <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
          <horstretch>0</horstretch>
          <verstretch>0</verstretch>
         </sizepolicy>
        </property>
        <property name="text">
-        <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-weight:600;&quot;&gt;Step1：&lt;/span&gt;将传声器插入校准器,&lt;/p&gt;&lt;p&gt;点击“&lt;span style=&quot; font-weight:600;&quot;&gt;开始校准&lt;/span&gt;”按钮。&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+        <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;span style=&quot; font-weight:600;&quot;&gt;Step1：&lt;/span&gt;将传声器&lt;br/&gt;插入校准器，&lt;br/&gt;点击“&lt;span style=&quot; font-weight:600;&quot;&gt;开始校准&lt;/span&gt;”按钮。&lt;/body&gt;&lt;/html&gt;</string>
        </property>
        <property name="alignment">
         <set>Qt::AlignCenter</set>
@@ -72,13 +72,13 @@
      <item>
       <widget class="QLabel" name="label_6">
        <property name="sizePolicy">
-        <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+        <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
          <horstretch>0</horstretch>
          <verstretch>0</verstretch>
         </sizepolicy>
        </property>
        <property name="text">
-        <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-weight:600;&quot;&gt;Step2：&lt;/span&gt;将麦克风按照图中位置放置。&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+        <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;span style=&quot; font-weight:600;&quot;&gt;Step2：&lt;/span&gt;将麦克风&lt;br/&gt;按图中位置&lt;br/&gt;放置。&lt;/body&gt;&lt;/html&gt;</string>
        </property>
        <property name="alignment">
         <set>Qt::AlignCenter</set>
@@ -125,7 +125,7 @@
     </layout>
    </item>
    <item>
-    <layout class="QHBoxLayout" name="horizontalLayout_5" stretch="1,5,5">
+    <layout class="QHBoxLayout" name="horizontalLayout_5" stretch="2,5,5">
      <item>
       <layout class="QVBoxLayout" name="verticalLayout_3">
        <item>
@@ -163,7 +163,7 @@
     </layout>
    </item>
    <item>
-    <layout class="QHBoxLayout" name="horizontalLayout_6" stretch="1,5,5">
+    <layout class="QHBoxLayout" name="horizontalLayout_6" stretch="2,5,5">
      <item>
       <layout class="QVBoxLayout" name="verticalLayout_4">
        <item>

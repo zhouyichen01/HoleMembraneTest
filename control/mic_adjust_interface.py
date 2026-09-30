@@ -32,6 +32,7 @@ class MicAdjustInterface(QDialog):
         self.stream_timer = QTimer(self)
         self.stream_timer.timeout.connect(self._handle_queue_and_update_ui)
         self._stream_chunks = []
+        self._ui_scale = 1.0
 
         self.logger = LogManager.set_log_handler("麦克风校准")
         self.init_ui()
@@ -176,10 +177,59 @@ class MicAdjustInterface(QDialog):
         ui_file.close()
         self.setWindowTitle("麦克风校准")
         self.setWindowFlags(self.windowFlags() | Qt.WindowMinimizeButtonHint| Qt.WindowMaximizeButtonHint)
+        # 先按屏幕可用区域缩小窗口，再把这个比例用于内部控件尺寸。
+        self._ui_scale = utils.resize_by_ui_with_screen(self)
+        # 调试输出：观察当前分辨率下是否触发了缩放。
+        print(self._ui_scale)
+        self.apply_scaled_layout()
         self.init_images()
         self.init_view()
         self.show()
         self.logger.info("打开麦克风校准界面")
+
+    def _scaled(self, value, minimum=1):
+        # 将设计稿里的固定尺寸按窗口缩放比例换算，并保留一个最小可读/可点尺寸。
+        return max(minimum, int(round(value * self._ui_scale)))
+
+    def apply_scaled_layout(self):
+        # scale 为 1 时说明窗口无需缩小，保持原始 UI 布局。
+        if self._ui_scale >= 1:
+            return
+
+        # 压缩布局边距和间距，给图表和底部操作区留出更多可见空间。
+        root_layout = self.layout()
+        if root_layout is not None:
+            margin = self._scaled(9, 2)
+            root_layout.setContentsMargins(margin, margin, margin, margin)
+            root_layout.setSpacing(self._scaled(6, 2))
+            for index in range(root_layout.count()):
+                root_layout.setStretch(index, 0)
+
+        for layout_name in (
+                "horizontalLayout_3", "horizontalLayout_4", "horizontalLayout_5", "horizontalLayout_6",
+                "verticalLayout", "verticalLayout_2", "verticalLayout_3", "verticalLayout_4"):
+            layout = getattr(self.ui, layout_name, None)
+            if layout is not None:
+                layout.setSpacing(self._scaled(6, 2))
+
+        # 小分辨率下让说明文字换行，避免把界面撑出窗口。
+        for label in (self.label_5, self.label_6):
+            label.setWordWrap(True)
+            label.setMaximumWidth(self._scaled(145, 72))
+            label.setMinimumHeight(self._scaled(120, 90))
+
+        for label in (self.label, self.label_2):
+            label.setMaximumWidth(self._scaled(70, 45))
+
+        for frame in (self.frame_plot3, self.frame_plot3_2, self.frame_plot4, self.frame_plot4_2):
+            frame.setMinimumSize(self._scaled(170, 120), self._scaled(120, 76))
+            frame.setMaximumHeight(self._scaled(128, 84))
+
+    def _apply_plot_screen_size(self, plot):
+        # pyqtgraph 控件也要限制高度，否则内部最小高度会把窗口重新撑大。
+        if self._ui_scale < 1:
+            plot.setMinimumHeight(self._scaled(112, 68))
+            plot.setMaximumHeight(self._scaled(120, 76))
 
     def init_fun(self):
         self.start_adjust_button.clicked.connect(self.start_adjust)
@@ -237,24 +287,35 @@ class MicAdjustInterface(QDialog):
                 self.target_voltage_value.setText("0.01")
 
     def init_images(self):
+        # 缩小时示意图控件也跟随 scale 调整，避免顶部区域把窗口宽度撑回去。
+        if self._ui_scale < 1:
+            preview_size = (self._scaled(340, 180), self._scaled(255, 130))
+        else:
+            preview_size = (400, 300)
+
         utils.set_clickable_graphics_image(
             parent=self,
             view=self.graphicsView,
             image_path=":/images/2mic薄层校准_画板.png",
-            preview_size=(400, 300),
+            preview_size=preview_size,
             title="校准图片预览",
         )
         utils.set_clickable_graphics_image(
             parent=self,
             view=self.graphicsView_2,
             image_path=":/images/2mic薄层_画板.png",
-            preview_size=(400, 300),
+            preview_size=preview_size,
             title="阻抗管图片预览",
         )
+        for view in (self.graphicsView, self.graphicsView_2):
+            view.setFixedSize(preview_size[0] + 4, preview_size[1] + 4)
+            view.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+            view.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
 
     def init_view(self):
         # Mic1 - Time
         self.plot3 = pyqtgraph.PlotWidget()
+        self._apply_plot_screen_size(self.plot3)
         layout3 = QVBoxLayout()
         layout3.setContentsMargins(0, 0, 0, 0)
         layout3.addWidget(self.plot3)
@@ -269,6 +330,7 @@ class MicAdjustInterface(QDialog):
 
         # Mic1 - Freq
         self.plot3_freq = pyqtgraph.PlotWidget()
+        self._apply_plot_screen_size(self.plot3_freq)
         lay3f = QVBoxLayout()
         lay3f.setContentsMargins(0, 0, 0, 0)
         lay3f.addWidget(self.plot3_freq)
@@ -284,13 +346,14 @@ class MicAdjustInterface(QDialog):
         self.plot3_freq.setLogMode(x=True, y=False)
         # 调整刻度字体大小
         font = pyqtgraph.QtGui.QFont()
-        font.setPointSize(11)
+        font.setPointSize(self._scaled(11, 8))
         self.plot3_freq.getAxis('bottom').setTickFont(font)
         # 使用自定义的对数坐标轴刻度标签格式
         self.plot3_freq.getAxis('bottom').logTickStrings = utils.custom_log_tick_strings
 
         # Mic2 - Time
         self.plot4 = pyqtgraph.PlotWidget()
+        self._apply_plot_screen_size(self.plot4)
         layout4 = QVBoxLayout()
         layout4.setContentsMargins(0, 0, 0, 0)
         layout4.addWidget(self.plot4)
@@ -305,6 +368,7 @@ class MicAdjustInterface(QDialog):
 
         # Mic2 - Freq
         self.plot4_freq = pyqtgraph.PlotWidget()
+        self._apply_plot_screen_size(self.plot4_freq)
         lay4f = QVBoxLayout()
         lay4f.setContentsMargins(0, 0, 0, 0)
         lay4f.addWidget(self.plot4_freq)

@@ -115,15 +115,40 @@ def is_float(str):
     except ValueError:
         return False
 
-def show_image_popup(parent, image_path, title="图片预览", popup_size=(820, 560)):
+def get_popup_image_max_size(parent, popup_size=(820, 560), ratio=0.8):
+    """
+    根据弹窗所属界面计算图片最大显示尺寸。
+    大图不会超过 popup_size，也不会超过父界面的 ratio 比例。
+    """
+    max_w, max_h = popup_size
+
+    if parent is not None:
+        parent_w = parent.width()
+        parent_h = parent.height()
+        if parent_w > 0 and parent_h > 0:
+            max_w = min(max_w, int(parent_w * ratio))
+            max_h = min(max_h, int(parent_h * ratio))
+
+    if max_w <= 0 or max_h <= 0:
+        screen = QApplication.primaryScreen()
+        size = screen.availableGeometry()
+        max_w = int(size.width() * ratio)
+        max_h = int(size.height() * ratio)
+
+    return max(max_w, 1), max(max_h, 1)
+
+
+def show_image_popup(parent, image_path, title="图片预览", popup_size=(820, 560), ratio=0.8):
     # 加载要弹出的原始图片。
     pixmap = QPixmap(image_path)
     if pixmap.isNull():
         QMessageBox.warning(parent, "提示", "图片加载失败！")
         return
 
+    max_w, max_h = get_popup_image_max_size(parent, popup_size, ratio)
+
     # 按最大宽高缩放，保持原图比例不变。
-    pixmap = pixmap.scaled(popup_size[0], popup_size[1], Qt.KeepAspectRatio, Qt.SmoothTransformation)
+    pixmap = pixmap.scaled(max_w, max_h, Qt.KeepAspectRatio, Qt.SmoothTransformation)
 
     # 创建一个简单弹窗，把缩放后的图片放进去。
     dialog = QDialog(parent)
@@ -140,7 +165,8 @@ def show_image_popup(parent, image_path, title="图片预览", popup_size=(820, 
     dialog.resize(pixmap.width() + 20, pixmap.height() + 20)
     dialog.exec_()
 
-def set_clickable_graphics_image(parent, view, image_path, preview_size, title="图片预览", popup_size=(820, 560)):
+def set_clickable_graphics_image(parent, view, image_path, preview_size, title="图片预览", popup_size=(820, 560),
+                                 popup_ratio=0.8):
     # 先在界面上的 QGraphicsView 里显示缩略图。
     pixmap = QPixmap(image_path)
     if pixmap.isNull():
@@ -159,7 +185,7 @@ def set_clickable_graphics_image(parent, view, image_path, preview_size, title="
 
     def mouse_press_event(event):
         if event.button() == Qt.LeftButton:
-            show_image_popup(parent, image_path, title, popup_size)
+            show_image_popup(parent, image_path, title, popup_size, popup_ratio)
         else:
             original_mouse_press_event(event)
 
@@ -741,6 +767,7 @@ def calculate_scale(real_spl: float, rms: float) -> float:
 def resize_by_ui_with_screen(obj, ratio=0.8):
     """
     ratio: 屏幕可用区域的比例上限，例如 0.8 表示不超过 4/5
+    返回实际缩放比例，给界面内部控件同步调整尺寸使用。
     """
     ui_w, ui_h = obj.width(), obj.height()
 
@@ -749,7 +776,11 @@ def resize_by_ui_with_screen(obj, ratio=0.8):
     max_w = int(size.width() * ratio)
     max_h = int(size.height() * ratio)
 
-    obj.resize(min(ui_w, max_w), min(ui_h, max_h))
+    # 只在原始 UI 超过屏幕比例上限时缩小；能放下时保持 1.0。
+    scale = min(max_w / ui_w, max_h / ui_h, 1.0)
+    # resize 只改变窗口本身，scale 返回给界面内部控件继续同步缩放。
+    obj.resize(int(ui_w * scale), int(ui_h * scale))
+    return scale
 
 
 def get_history_data_path(data_file, config_filename="tree_config.json"):
