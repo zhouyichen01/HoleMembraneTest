@@ -1,20 +1,7 @@
 {
     "line": {
         "is_display_history_line": 1,
-        "manage_history_line": {
-            "0": {
-                "state": "True",
-                "colour": "#00ff00",
-                "line_name": "2026-09-15_17-54-31",
-                "data_file": "history_lines/history_line_20260915_175434_080792_0.npz"
-            },
-            "1": {
-                "state": "True",
-                "colour": "#aaaaff",
-                "line_name": "2026-09-15_17-54-55",
-                "data_file": "history_lines/history_line_20260915_175457_880549_1.npz"
-            }
-        },
+        "manage_history_line": {},
         "saved_history_line": []
     }
 }
