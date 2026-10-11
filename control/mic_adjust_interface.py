@@ -177,10 +177,8 @@ class MicAdjustInterface(QDialog):
         ui_file.close()
         self.setWindowTitle("麦克风校准")
         self.setWindowFlags(self.windowFlags() | Qt.WindowMinimizeButtonHint| Qt.WindowMaximizeButtonHint)
-        # 先按屏幕可用区域缩小窗口，再把这个比例用于内部控件尺寸。
+        # 先按屏幕可用区域缩小窗口
         self._ui_scale = utils.resize_by_ui_with_screen(self)
-        # 调试输出：观察当前分辨率下是否触发了缩放。
-        print(self._ui_scale)
         self.apply_scaled_layout()
         self.init_images()
         self.init_view()

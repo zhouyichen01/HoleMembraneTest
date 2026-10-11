@@ -12,6 +12,8 @@ class ImptubeParamsSetInterface(QDialog):
         super().__init__(parent)
         self.parent = parent
         self.ui = None
+        # 缩放比例
+        self._ui_scale = 1.0
         self.logger = LogManager.set_log_handler("阻抗管参数设置")
         self.init_ui()
         self.init_fun()
@@ -27,17 +29,25 @@ class ImptubeParamsSetInterface(QDialog):
         self.setWindowTitle("阻抗管参数设置")
         # 最小化|最大化
         self.setWindowFlags(self.windowFlags() | Qt.WindowMinimizeButtonHint)
+        # 按屏幕可用区域缩小窗口
+        utils.resize_by_ui_with_screen(self)
         self.init_images()
         self.init_config()
         self.show()
         self.logger.info("打开阻抗管参数设置界面")
 
+    def _scaled(self, value, minimum):
+        scaled_value = utils.scale_ui_value(self, value, minimum)
+        return scaled_value
+
     def init_images(self):
+        # 示意图缩略图原本是固定尺寸，小屏幕下跟随窗口比例缩小。
+        preview_size = (self._scaled(390, 260), self._scaled(282, 188))
         utils.set_clickable_graphics_image(
             parent=self,
             view=self.graphicsView,
             image_path=":/images/2mic薄层_画板.png",
-            preview_size=(390, 282),
+            preview_size=preview_size,
             title="参数设置图片预览",
         )
 

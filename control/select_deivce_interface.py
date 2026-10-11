@@ -15,6 +15,8 @@ class SelectDeviceInterface(QDialog):
         self.parent = parent
         self.ui = None
         self.signal_info = None
+        # 缩放比例
+        self._ui_scale = 1.0
         self.logger = LogManager.set_log_handler("硬件设备选择")
         self.init_ui()
         self.init_fun()
@@ -32,19 +34,25 @@ class SelectDeviceInterface(QDialog):
         self.setWindowTitle("硬件设备选择")
         # 最小化
         self.setWindowFlags(self.windowFlags() | Qt.WindowMinimizeButtonHint)
+        # 先按屏幕可用区域缩小窗口
+        utils.resize_by_ui_with_screen(self)
         self.show()
         self.logger.info("打开硬件设备选择界面")
+
+    def _scaled(self, value, minimum):
+        scaled_value = utils.scale_ui_value(self, value, minimum)
+        return scaled_value
 
     def init_fun(self):
         self.save_all_button.clicked.connect(self.save_all_device_settings)
         self.refresh_devices.clicked.connect(self.refresh_device_list)
-        self.comboBox.setMinimumWidth(350)
-        self.comboBox_2.setMinimumWidth(350)
+        self.comboBox.setMinimumWidth(self._scaled(350, 180))
+        self.comboBox_2.setMinimumWidth(self._scaled(350, 180))
         # 加永久布局
         self.groupBox_4 = self.findChild(QGroupBox, 'groupBox_4')
         self.channels_layout = QVBoxLayout(self.groupBox_4)
         self.groupBox_4.setLayout(self.channels_layout)
-        self.groupBox_4.setFixedWidth(140)
+        self.groupBox_4.setFixedWidth(self._scaled(140, 90))
 
     def refresh_device_list(self):
         # 刷新设备列表
@@ -161,7 +169,7 @@ class SelectDeviceInterface(QDialog):
                 # 右侧显示对应的 QComboBox
                 combo_box = QComboBox(self)
                 combo_box.setObjectName(f"comboxBox_In{i}")
-                combo_box.setFixedWidth(50)  # 设置宽度
+                combo_box.setFixedWidth(self._scaled(50, 42))  # 设置宽度
 
                 # 将 In1, In2, In3, In4 等按顺序添加到下拉框
                 for j in range(1, channel_count + 1):
@@ -174,7 +182,7 @@ class SelectDeviceInterface(QDialog):
                 self.channels_layout.addLayout(row_layout)
             # 添加保存按钮
             save_channel_button = QPushButton("保存通道设置", self.groupBox_4)
-            save_channel_button.setFixedWidth(120)
+            save_channel_button.setFixedWidth(self._scaled(120, 80))
             save_channel_button.clicked.connect(lambda: self.save_channel_settings(channel_count))
             self.channels_layout.addWidget(save_channel_button, alignment=Qt.AlignCenter)
 
@@ -282,11 +290,11 @@ class SelectDeviceInterface(QDialog):
         header.setStretchLastSection(False)
 
         # 各列固定宽度（可以根据你截图里的效果调整数值）
-        self.tableView.setColumnWidth(0, 40)  # 序号
-        self.tableView.setColumnWidth(2, 60)  # 输入通道
-        self.tableView.setColumnWidth(3, 60)  # 输出通道
-        self.tableView.setColumnWidth(4, 180)  # 驱动类型
-        self.tableView.setColumnWidth(5, 100)  # 采样率
+        self.tableView.setColumnWidth(0, self._scaled(40, 32))  # 序号
+        self.tableView.setColumnWidth(2, self._scaled(60, 45))  # 输入通道
+        self.tableView.setColumnWidth(3, self._scaled(60, 45))  # 输出通道
+        self.tableView.setColumnWidth(4, self._scaled(180, 100))  # 驱动类型
+        self.tableView.setColumnWidth(5, self._scaled(100, 78))  # 采样率
 
         header.setSectionResizeMode(1, QHeaderView.Stretch)  # 名称填充
 

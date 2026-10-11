@@ -764,10 +764,14 @@ def calculate_scale(real_spl: float, rms: float) -> float:
     scale = p / rms
     return scale
 
-def resize_by_ui_with_screen(obj, ratio=0.8):
+def resize_by_ui_with_screen(obj, ratio=0.9):
     """
-    ratio: 屏幕可用区域的比例上限，例如 0.8 表示不超过 4/5
-    返回实际缩放比例，给界面内部控件同步调整尺寸使用。
+    负责缩整个窗口。
+    1.先读取当前窗口 .ui 里的原始宽高，比如设备选择界面是 1200 x 600。
+    2.再读取电脑屏幕可用区域，比如扣掉任务栏后的大小。
+    3.用 ratio 算出窗口最多能占屏幕多少，比如 ratio=0.9 表示最多占屏幕可用区域的 90%。
+    4.如果窗口太大，就按比例缩小；如果本来就放得下，就保持原大小。
+    5.把这个缩放比例保存到：obj._ui_scale
     """
     ui_w, ui_h = obj.width(), obj.height()
 
@@ -780,7 +784,23 @@ def resize_by_ui_with_screen(obj, ratio=0.8):
     scale = min(max_w / ui_w, max_h / ui_h, 1.0)
     # resize 只改变窗口本身，scale 返回给界面内部控件继续同步缩放。
     obj.resize(int(ui_w * scale), int(ui_h * scale))
+    obj._ui_scale = scale
+    interface_name = obj.windowTitle() or obj.__class__.__name__
+    utils_logger.info(f"[{interface_name}] 缩放比例scale:{obj._ui_scale}")
     return scale
+
+def scale_ui_value(obj, value, minimum=1):
+    """
+    负责缩窗口里面写死尺寸的控件。
+
+    resize_by_ui_with_screen(obj) 会把窗口缩放比例保存到 obj._ui_scale。
+    这里把原始设计尺寸 value 乘以该比例，并用 minimum 做下限，
+    避免按钮、下拉框等固定尺寸控件在小屏幕下缩得太小。
+    例如：_ui_scale=0.8，value=350，minimum=180，返回 280。
+    """
+    ui_scale = getattr(obj, "_ui_scale", 1.0)
+    scaled_value = int(round(value * ui_scale))
+    return max(minimum, scaled_value)
 
 
 def get_history_data_path(data_file, config_filename="tree_config.json"):

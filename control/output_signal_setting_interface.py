@@ -21,6 +21,8 @@ class OutputSignalSetInterface(QDialog):
         self.parent = parent
         self.ui = None
         self.signal_info = None
+        # 缩放比例
+        self._ui_scale = 1.0
         self.logger = LogManager.set_log_handler("输出信号设置")
         self.init_ui()
         self.init_fun()
@@ -37,6 +39,8 @@ class OutputSignalSetInterface(QDialog):
         self.setWindowTitle("输出信号设置")
         # 最小化|最大化
         self.setWindowFlags(self.windowFlags() | Qt.WindowMinimizeButtonHint| Qt.WindowMaximizeButtonHint)
+        # 按屏幕可用区域缩小窗口
+        utils.resize_by_ui_with_screen(self)
         self.init_view()
         self.init_config()
         self.show()
