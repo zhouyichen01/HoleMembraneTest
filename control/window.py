@@ -1029,12 +1029,18 @@ class MainWindow(QMainWindow):
             Z_Re = savgol_filter(Z_Re, window_length=self.soft_value, polyorder=3)
             Z_Im = savgol_filter(Z_Im, window_length=self.soft_value, polyorder=3)
 
-        save_dir = QFileDialog.getExistingDirectory(self, "选择保存文件夹")
-        if not save_dir:
+        file1, _ = QFileDialog.getSaveFileName(
+            self,
+            "保存测试数据",
+            os.path.join(os.getcwd(), "传输阻抗率测试结果.csv"),
+            "CSV 文件 (*.csv);;所有文件 (*)"
+        )
+        if not file1:
             return  # 用户取消
+        if not os.path.splitext(file1)[1]:
+            file1 += ".csv"
 
         try:
-            file1 = os.path.join(save_dir, "传输阻抗率测试结果.csv")
             with open(file1, "w", newline='', encoding='utf-8-sig') as f:
                 writer = csv.writer(f)
                 writer.writerow(["f", "Z_abs", "Z_Re", "Z_Im"])
