@@ -26,7 +26,7 @@ class MicAdjustInterface(QDialog):
         self.mic1_pa = None
         self.mic2_pa = None
         self.mic_binding = (0, 1)
-        self.mic_deviation_db = (0.0, 0.0)
+        self.mic_deviation_db = (1.0, 1.0)
         self.streaming_buffer = []
         self.stream_instance = None
         self.stream_timer = QTimer(self)
@@ -388,7 +388,7 @@ class MicAdjustInterface(QDialog):
     def _load_mic_binding_indices(self):
         # 默认顺序
         idx1, idx2 = 0, 1
-        dev1, dev2 = 0.0, 0.0
+        dev1, dev2 = 1.0, 1.0
         try:
             path = utils.get_config_path("mic_calibration.json")
             with open(path, "r", encoding="utf-8") as f:
@@ -496,12 +496,13 @@ class MicAdjustInterface(QDialog):
         """
         mic1_data = buf[:, mic_binding[0]]
         mic2_data = buf[:, mic_binding[1]]
-        spl_smooth1 = AudioThdFrequencyResponseAnalysis.spl_calculation(buf[:, mic_binding[0]])
+        spl_smooth1, _ = AudioThdFrequencyResponseAnalysis.spl_calculation(buf[:, mic_binding[0]])
         real_1 = np.max(spl_smooth1)
-        spl_smooth2 = AudioThdFrequencyResponseAnalysis.spl_calculation(buf[:, mic_binding[1]])
+        spl_smooth2, _ = AudioThdFrequencyResponseAnalysis.spl_calculation(buf[:, mic_binding[1]])
         real_2 = np.max(spl_smooth2)
-        real_spl1 = real_1 + mic_deviation_db[0]
-        real_spl2 = real_2 + mic_deviation_db[1]
+        factor1, factor2 = mic_deviation_db
+        real_spl1 = real_1 + 20 * np.log10(factor1)
+        real_spl2 = real_2 + 20 * np.log10(factor2)
         rms1 = utils.calculate_rms(buf[:, mic_binding[0]])
         rms2 = utils.calculate_rms(buf[:, mic_binding[1]])
         scale1 = utils.calculate_scale(real_spl1, rms1)
@@ -517,14 +518,15 @@ class MicAdjustInterface(QDialog):
         """
         mic1_data = recording[:, mic_binding[0]]
         mic2_data = recording[:, mic_binding[1]]
-        spl_smooth1 = AudioThdFrequencyResponseAnalysis.spl_calculation(recording[:, mic_binding[0]])
+        spl_smooth1, _ = AudioThdFrequencyResponseAnalysis.spl_calculation(recording[:, mic_binding[0]])
         real_1 = np.max(spl_smooth1)
-        spl_smooth2 = AudioThdFrequencyResponseAnalysis.spl_calculation(recording[:, mic_binding[1]])
+        spl_smooth2, _ = AudioThdFrequencyResponseAnalysis.spl_calculation(recording[:, mic_binding[1]])
         real_2 = np.max(spl_smooth2)
-        real_spl1 = real_1 + mic_deviation_db[0]
-        real_spl2 = real_2 + mic_deviation_db[1]
-        print(f"real_1实测: {real_1}, +偏差值后: {real_spl1}")
-        print(f"real_2实测: {real_2}, +偏差值后: {real_spl2}")
+        factor1, factor2 = mic_deviation_db
+        real_spl1 = real_1 + 20 * np.log10(factor1)
+        real_spl2 = real_2 + 20 * np.log10(factor2)
+        print(f"real_1实测: {real_1}, 校准后: {real_spl1}")
+        print(f"real_2实测: {real_2}, 校准后: {real_spl2}")
         rms1 = utils.calculate_rms(recording[:, mic_binding[0]])
         rms2 = utils.calculate_rms(recording[:, mic_binding[1]])
         scale1 = utils.calculate_scale(real_spl1, rms1)

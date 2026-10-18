@@ -623,8 +623,9 @@ def refresh_mic_config_json(obj):
             # 按 count 生成 { "In1": {...}, ..., "InN": {...} }
             mic_cfg = {
                 f"In{i}": {
-                    "deviation_value": "0",
-                    "binding_index": i - 1
+                    "deviation_value": "1.0",
+                    "binding_index": i - 1,
+                    "sensitivity": "0"
                 }
                 for i in range(1, count + 1)
             }

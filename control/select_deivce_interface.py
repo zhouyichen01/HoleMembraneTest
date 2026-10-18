@@ -53,6 +53,40 @@ class SelectDeviceInterface(QDialog):
         self.channels_layout = QVBoxLayout(self.groupBox_4)
         self.groupBox_4.setLayout(self.channels_layout)
         self.groupBox_4.setFixedWidth(self._scaled(140, 90))
+        self.groupBox_5.setFixedWidth(self._scaled(180, 130))
+        self.vp_line_edit.setFixedWidth(self._scaled(70, 55))
+        self.save_vp_button.setFixedWidth(self._scaled(75, 65))
+        self.save_vp_button.clicked.connect(self.save_vp_value)
+        self.load_vp_value()
+
+    def load_vp_value(self):
+        res, config = utils.get_config_content("basic_params.json")
+        if res:
+            vp_value = config.get("basic_params", {}).get("Vp", "")
+            self.vp_line_edit.setText(str(vp_value))
+
+    def save_vp_value(self):
+        vp_text = self.vp_line_edit.text().strip()
+        if not vp_text:
+            QMessageBox.warning(self, "警告", "请输入Vp值")
+            return
+
+        try:
+            vp_value = float(vp_text)
+        except ValueError:
+            QMessageBox.warning(self, "警告", "Vp值必须是数字")
+            return
+
+        res, config = utils.get_config_content("basic_params.json")
+        if not res:
+            QMessageBox.critical(self, "保存失败", "无法读取配置文件内容 basic_params.json！")
+            return
+
+        config.setdefault("basic_params", {})["Vp"] = vp_value
+        if utils.write_config_content("basic_params.json", config):
+            QMessageBox.information(self, "保存成功", "Vp值已保存！")
+        else:
+            QMessageBox.critical(self, "保存失败", "配置文件保存失败！")
 
     def refresh_device_list(self):
         # 刷新设备列表

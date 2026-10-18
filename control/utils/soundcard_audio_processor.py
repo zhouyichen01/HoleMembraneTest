@@ -34,7 +34,6 @@ class SoundcardAudioProcessor(object):
             # 使用 sounddevice 录音，返回的数据 shape 为 (frames, channels)，这里取第一个通道并转置
             recorded_data = sd.rec(frames=num_frames, samplerate=sample_rate, channels=channels, blocking=blocking)
             recorded_data = recorded_data.T[channel_index]
-            print(f"recorded_data:{recorded_data}")
             # 如果设置了丢弃帧数，就丢掉前面的部分
             if prolong_frames > 0:
                 recorded_data = recorded_data[prolong_frames:]

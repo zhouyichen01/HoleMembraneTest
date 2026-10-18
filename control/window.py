@@ -54,7 +54,7 @@ class MainWindow(QMainWindow):
         self.streaming_buffer = []
         self.stream_instance = None
         self.mic_binding = (0, 1)
-        self.mic_deviation_db = (0.0, 0.0)
+        self.mic_deviation_db = (1.0, 1.0)
         self.stream_timer = QTimer(self)
         self.stream_timer.timeout.connect(self._handle_queue_and_update_ui)
 
@@ -699,7 +699,7 @@ class MainWindow(QMainWindow):
     def _load_mic_binding_indices(self):
         # 默认顺序
         idx1, idx2 = 0, 1
-        dev1, dev2 = 0.0, 0.0
+        dev1, dev2 = 1.0, 1.0
         try:
             path = utils.get_config_path("mic_calibration.json")
             with open(path, "r", encoding="utf-8") as f:

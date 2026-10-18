@@ -1,6 +1,5 @@
 import json
 import os
-import re
 
 import numpy as np
 import sounddevice as sd
@@ -26,6 +25,8 @@ class MicoutputVoltageInterface(QDialog):
         self.play_flag = False
         self.countdown = 10
         self.ui = None
+        self.v2pa_factor = None
+        self.sensitivity = None
         self.logger = LogManager.set_log_handler("输入/输出校准")
         self.init_ui()
         self.init_fun()
@@ -241,8 +242,10 @@ class MicoutputVoltageInterface(QDialog):
     def input_calibration(self):
         """
         处理输入电压校准
-        计算 SPL（声压级）并处理其偏差。
+        根据标准声压和录音 RMS 计算麦克风灵敏度，单位 V/Pa。
         """
+        self.v2pa_factor = None
+        self.sensitivity = None
         prolong = 1
         samplerate = utils.get_device_info()
         res, content = utils.get_config_content("basic_params.json")
@@ -271,76 +274,74 @@ class MicoutputVoltageInterface(QDialog):
             self.record_state.setText("待录制")
             self.record_state.setStyleSheet("color: rgb(255, 170, 0);")
             return
-        # 计算平均声压级（SPL）
-        self.average_value = self.calculate_average_spl(recorded_dict, channel_index)
+        vp = content["basic_params"]["Vp"]
+        self.average_value, dbfs = self.calculate_average_spl(recorded_dict, channel_index, vp)
         if self.average_value is None:
             self.record_state.setText("待录制")
             self.record_state.setStyleSheet("color: rgb(255, 170, 0);")
             QtWidgets.QApplication.processEvents()
             return
-        # 计算偏差值
-        deviation_value = self.calculate_deviation(self.average_value)
-        self.deviation_lineedit.setText(f"{deviation_value} dBSPL")
-        if str(deviation_value) == "inf":
-            QMessageBox.critical(self, "错误", f"校准失败：偏差值为{deviation_value}")
-            self.logger.error(f"校准失败：偏差值为{deviation_value}")
+        v2pa_factor, sensitivity = self.calculate_deviation(self.average_value, dbfs)
+        self.deviation_lineedit.setText(f"{sensitivity} V/Pa")
+        if not np.isfinite(v2pa_factor) or v2pa_factor <= 0:
+            QMessageBox.critical(self, "错误", f"校准失败：偏差值为{v2pa_factor}")
+            self.logger.error(f"校准失败：偏差值为{v2pa_factor}")
+        elif not np.isfinite(sensitivity) or sensitivity <= 0:
+            QMessageBox.critical(self, "错误", f"校准失败：灵敏度为{sensitivity} V/Pa")
+            self.logger.error(f"校准失败：灵敏度为{sensitivity} V/Pa")
         else:
+            self.v2pa_factor, self.sensitivity = v2pa_factor, sensitivity
             QMessageBox.information(self, "成功", "校准成功！请保存数据！")
             self.logger.info(f"校准成功！")
         self.record_state.setText("待录制")
         self.record_state.setStyleSheet("color: rgb(255, 170, 0);")
         QtWidgets.QApplication.processEvents()
 
-    def calculate_average_spl(self, recorded_dict, channel_index):
+    def calculate_average_spl(self, recorded_dict, channel_index, vp):
         """
-        计算平均声压级（SPL）。
-        该方法录制音频数据，计算SPL曲线，然后从选定的范围内计算出平均值。
-        参数:
-        recorded_dict - 包含录音信息的字典。
-
-        返回:
-        平均SPL值。
+        保留原函数名：这里返回校准录音的 RMS，用于后续计算 V/Pa。
         """
         rec_code, recorded_data = SoundcardAudioProcessor().sd_rec(recorded_dict, channel_index)
-        step = 100
+        step = len(recorded_data) // 3
         if rec_code == True:
-            spl_smooth = AudioThdFrequencyResponseAnalysis().spl_calculation(recorded_data)
+            spl_smooth, dbfs = AudioThdFrequencyResponseAnalysis().spl_calculation(recorded_data, method="rms",
+                                                                             window_size=1201, vp = vp)
             spl_smooth_mid = len(spl_smooth) // 2
             spl_smooth_start = spl_smooth_mid - step
             spl_smooth_end = spl_smooth_mid + step
             spl_sample = spl_smooth[spl_smooth_start:spl_smooth_end]
-            self.average_value = np.sum(spl_sample) / (step * 2)
-            return self.average_value
+            return np.mean(spl_sample), dbfs
         else:
             # recorded_data 这里其实是错误信息字符串
             err_msg = recorded_data
             QMessageBox.critical(self, "录音错误", err_msg)
             self.logger.error(err_msg)
-            return None
+            return None , None
 
-
-    def calculate_deviation(self, average_value):
+    def calculate_deviation(self, average_value, dbfs):
         """
-        计算偏差值
+        保留原函数名：根据录音 RMS 和标准声压计算灵敏度，单位 V/Pa。
         """
         if self.standard_spl_i.isChecked():
             deviation_value = round(94 - average_value, 1)
         else:
             deviation_value = round(114 - average_value, 1)
-        return deviation_value
+        sensitivity = 10 ** (dbfs / 20)
+        v2pa_factor = 10 ** (deviation_value / 20)
+        self.logger.info(
+            f"校准偏差值：{deviation_value} dB，系数：{v2pa_factor:.3f}，"
+            f"灵敏度：{sensitivity:.4f} V/Pa"
+        )
+        return round(v2pa_factor, 3), round(sensitivity, 4)
 
     def save_mic_deviation_value(self):
         """
-        保存 麦克风的偏差值进json
+        保存所选通道的偏差值和灵敏度到 json，灵敏度单位 V/Pa。
         """
         selected_channel = self.channel_number.currentText()
-        deviation_lineedit_text = self.deviation_lineedit.text()
-        if not deviation_lineedit_text:
+        if self.v2pa_factor is None or self.sensitivity is None:
             QMessageBox.warning(self, "警告", "请先校准Mic！")
             return
-            # 提取数字部分
-        deviation_match = re.findall(r"[-+]?\d*\.?\d+", deviation_lineedit_text)
-        deviation_match = deviation_match[0] if deviation_match else deviation_lineedit_text
 
         channel_config_path = utils.get_config_path("mic_calibration.json")
         try:
@@ -349,20 +350,23 @@ class MicoutputVoltageInterface(QDialog):
 
             # 检查选中的麦克风是否在配置文件中
             if selected_channel in channel_config:
-                channel_config[selected_channel]['deviation_value'] = deviation_match
+                channel_config[selected_channel]['deviation_value'] = str(self.v2pa_factor)
+                channel_config[selected_channel]['sensitivity'] = str(self.sensitivity)
                 with open(channel_config_path, "w", encoding="utf-8") as f:
                     json.dump(channel_config, f, ensure_ascii=False, indent=4)
-                    self.logger.info(f"成功保存 {selected_channel} 的偏差值 {deviation_match}")
-                    QMessageBox.information(self, "成功", f"保存成功！{selected_channel} 的偏差值 {deviation_match}！")
+                self.logger.info(f"成功保存 {selected_channel} 的偏差值和灵敏度")
+                QMessageBox.information(self, "成功", f"保存成功！{selected_channel} 的偏差值和灵敏度已保存！")
             else:
                 QMessageBox.warning(self, "错误", f"配置中未找到 {selected_channel} 的相关数据")
         except Exception as e:
-            self.logger.error(f"读取配置失败: {e}")
-            QMessageBox.warning(self, "错误", f"读取 {channel_config_path} 配置失败：{e}")
+            self.logger.error(f"保存配置失败: {e}")
+            QMessageBox.warning(self, "错误", f"保存 {channel_config_path} 配置失败：{e}")
 
     def reset_intput_clicked(self):
         self.cal_button.setEnabled(True)
         self.deviation_lineedit.clear()
+        self.v2pa_factor = None
+        self.sensitivity = None
 
     def closeEvent(self, event):
         if self.parent:
