@@ -148,8 +148,8 @@ class MainWindow(QMainWindow):
         utils.set_clickable_graphics_image(
             parent=self,
             view=self.schematic1,
-            image_path=":/images/2mic薄层_画板.png",
-            preview_size=(600, 400),
+            image_path=":/images/2mic薄层_画板2026_hd.png",
+            preview_size=(435, 291),
             title="首页图片预览",
         )
         # 获取主界面的布局并设置内容的边距

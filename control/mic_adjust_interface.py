@@ -294,14 +294,14 @@ class MicAdjustInterface(QDialog):
         utils.set_clickable_graphics_image(
             parent=self,
             view=self.graphicsView,
-            image_path=":/images/2mic薄层校准_画板.png",
+            image_path=":/images/2mic薄层校准_画板2026_hd.png",
             preview_size=preview_size,
             title="校准图片预览",
         )
         utils.set_clickable_graphics_image(
             parent=self,
             view=self.graphicsView_2,
-            image_path=":/images/2mic薄层_画板.png",
+            image_path=":/images/2mic薄层_画板2026_hd.png",
             preview_size=preview_size,
             title="阻抗管图片预览",
         )
