@@ -4,15 +4,16 @@ import os
 import numpy as np
 import sounddevice as sd
 
-from PyQt5.QtCore import QFile, Qt
+from PyQt5.QtCore import QFile, Qt, QTimer
 from PyQt5.QtWidgets import QDialog, QMessageBox
 from PyQt5.uic import loadUi
 from PyQt5 import QtWidgets
 
 from control.log_manager import LogManager
 from control.utils import utils
+from control.utils.audio_session_manager import AudioSessionManager
 from control.utils.audio_thd_frequency_response_analysis import AudioThdFrequencyResponseAnalysis
-from control.utils.soundcard_audio_processor import SoundcardAudioProcessor
+from control.utils.streaming_audio_processor import DuplexStreamingPlayRec
 
 
 class MicoutputVoltageInterface(QDialog):
@@ -27,6 +28,11 @@ class MicoutputVoltageInterface(QDialog):
         self.ui = None
         self.v2pa_factor = None
         self.sensitivity = None
+        self.stream_instance = None
+        self.stream_timer = QTimer(self)
+        self.stream_timer.timeout.connect(self._handle_input_calibration_stream)
+        self._input_channel_index = None
+        self._input_vp = None
         self.logger = LogManager.set_log_handler("输入/输出校准")
         self.init_ui()
         self.init_fun()
@@ -241,12 +247,11 @@ class MicoutputVoltageInterface(QDialog):
 
     def input_calibration(self):
         """
-        处理输入电压校准
-        根据标准声压和录音 RMS 计算麦克风灵敏度，单位 V/Pa。
+        启动输入电压校准的流式录音。
+        保持“录制中”状态，不显示或更新计时；录音结束后由定时器收尾。
         """
         self.v2pa_factor = None
         self.sensitivity = None
-        prolong = 1
         samplerate = utils.get_device_info()
         res, content = utils.get_config_content("basic_params.json")
         if res:
@@ -258,11 +263,6 @@ class MicoutputVoltageInterface(QDialog):
             self.record_state.setStyleSheet("color: rgb(255, 170, 0);")
             return
 
-        recorded_dict = {"channels": channels_counts,
-                         "sample_rate": samplerate,
-                         "num_frames": 10 * samplerate,
-                         "prolong_frames": int(prolong * samplerate)
-                         }
         # 获取下拉框通道数据
         channel_number_text = self.channel_number.currentText()
         res, config = utils.get_config_content("mic_calibration.json")
@@ -274,14 +274,81 @@ class MicoutputVoltageInterface(QDialog):
             self.record_state.setText("待录制")
             self.record_state.setStyleSheet("color: rgb(255, 170, 0);")
             return
-        vp = content["basic_params"]["Vp"]
-        self.average_value, dbfs = self.calculate_average_spl(recorded_dict, channel_index, vp)
-        if self.average_value is None:
-            self.record_state.setText("待录制")
-            self.record_state.setStyleSheet("color: rgb(255, 170, 0);")
-            QtWidgets.QApplication.processEvents()
+        if not AudioSessionManager.acquire(self):
+            QMessageBox.warning(self, "提示", "音频设备正在被其它界面占用，请先停止/关闭其它录音功能。")
+            self._set_input_record_idle()
             return
-        v2pa_factor, sensitivity = self.calculate_deviation(self.average_value, dbfs)
+
+        try:
+            input_device = content["basic_params"]["input_selected_device_id"]
+            output_device = content["basic_params"]["output_selected_device_id"]
+            input_channels = sd.query_devices(input_device, "input")["max_input_channels"]
+            output_channels = sd.query_devices(output_device, "output")["max_output_channels"]
+            if channels_counts > input_channels:
+                raise ValueError(f"输入设备仅支持 {input_channels} 个通道，配置需要 {channels_counts} 个通道")
+            if output_channels < 1:
+                raise ValueError("输出设备不可用，无法启动音频流")
+
+            self._input_channel_index = channel_index
+            self._input_vp = content["basic_params"]["Vp"]
+            duration = 10
+            silence = np.zeros((duration * samplerate, int(output_channels)), dtype=np.float32)
+            self.cal_button.setEnabled(False)
+            self.stream_instance = DuplexStreamingPlayRec()
+            self.stream_instance.start(
+                stimulus_data=silence,
+                sample_rate=samplerate,
+                input_device=input_device,
+                output_device=output_device,
+                input_channels=int(channels_counts),
+                output_channels=int(output_channels),
+                duration=duration,
+                blocksize=2048,
+            )
+            self.stream_timer.start(50)
+            self.logger.info("开始输入校准流式录音")
+        except Exception as e:
+            self.logger.exception("输入校准录音启动失败")
+            QMessageBox.critical(self, "录音错误", f"录音失败：{e}")
+            self._set_input_record_idle()
+            AudioSessionManager.release(self)
+
+    def _handle_input_calibration_stream(self):
+        """持续取出回调数据；不更新计时文本，录制结束后再计算校准结果。"""
+        if self.stream_instance is None:
+            return
+
+        self.stream_instance.process_queue()
+        if self.stream_instance.is_recording:
+            return
+
+        self.stream_timer.stop()
+        stream = self.stream_instance
+        self.stream_instance = None
+        recording = stream.get_recorded_data()
+        error = stream.error
+        stream.stop()
+
+        try:
+            if error:
+                raise RuntimeError(error)
+            if recording.shape[0] == 0:
+                raise ValueError("未采集到录音数据")
+
+            recorded_data = recording[:, self._input_channel_index]
+            # 延续原有逻辑：丢弃启动后的第 1 秒，再从中段取稳定数据计算。
+            recorded_data = recorded_data[int(stream.sample_rate):]
+            self.average_value, dbfs = self.calculate_average_spl(recorded_data, self._input_vp)
+            v2pa_factor, sensitivity = self.calculate_deviation(self.average_value, dbfs)
+            self._finish_input_calibration(v2pa_factor, sensitivity)
+        except Exception as e:
+            self.logger.exception("输入校准录音处理失败")
+            QMessageBox.critical(self, "录音错误", f"录音失败：{e}")
+        finally:
+            self._set_input_record_idle()
+            AudioSessionManager.release(self)
+
+    def _finish_input_calibration(self, v2pa_factor, sensitivity):
         self.deviation_lineedit.setText(f"{sensitivity} V/Pa")
         if not np.isfinite(v2pa_factor) or v2pa_factor <= 0:
             QMessageBox.critical(self, "错误", f"校准失败：偏差值为{v2pa_factor}")
@@ -293,30 +360,27 @@ class MicoutputVoltageInterface(QDialog):
             self.v2pa_factor, self.sensitivity = v2pa_factor, sensitivity
             QMessageBox.information(self, "成功", "校准成功！请保存数据！")
             self.logger.info(f"校准成功！")
+
+    def _set_input_record_idle(self):
         self.record_state.setText("待录制")
         self.record_state.setStyleSheet("color: rgb(255, 170, 0);")
+        self.cal_button.setEnabled(True)
         QtWidgets.QApplication.processEvents()
 
-    def calculate_average_spl(self, recorded_dict, channel_index, vp):
+    def calculate_average_spl(self, recorded_data, vp):
         """
         保留原函数名：这里返回校准录音的 RMS，用于后续计算 V/Pa。
         """
-        rec_code, recorded_data = SoundcardAudioProcessor().sd_rec(recorded_dict, channel_index)
         step = len(recorded_data) // 3
-        if rec_code == True:
-            spl_smooth, dbfs = AudioThdFrequencyResponseAnalysis().spl_calculation(recorded_data, method="rms",
-                                                                             window_size=1201, vp = vp)
-            spl_smooth_mid = len(spl_smooth) // 2
-            spl_smooth_start = spl_smooth_mid - step
-            spl_smooth_end = spl_smooth_mid + step
-            spl_sample = spl_smooth[spl_smooth_start:spl_smooth_end]
-            return np.mean(spl_sample), dbfs
-        else:
-            # recorded_data 这里其实是错误信息字符串
-            err_msg = recorded_data
-            QMessageBox.critical(self, "录音错误", err_msg)
-            self.logger.error(err_msg)
-            return None , None
+        if step == 0:
+            raise ValueError("录音数据过短")
+        spl_smooth, dbfs = AudioThdFrequencyResponseAnalysis().spl_calculation(
+            recorded_data, method="rms", window_size=1201, vp=vp)
+        spl_smooth_mid = len(spl_smooth) // 2
+        spl_smooth_start = spl_smooth_mid - step
+        spl_smooth_end = spl_smooth_mid + step
+        spl_sample = spl_smooth[spl_smooth_start:spl_smooth_end]
+        return np.mean(spl_sample), dbfs
 
     def calculate_deviation(self, average_value, dbfs):
         """
@@ -363,16 +427,27 @@ class MicoutputVoltageInterface(QDialog):
             QMessageBox.warning(self, "错误", f"保存 {channel_config_path} 配置失败：{e}")
 
     def reset_intput_clicked(self):
+        self._stop_input_calibration_stream()
         self.cal_button.setEnabled(True)
         self.deviation_lineedit.clear()
         self.v2pa_factor = None
         self.sensitivity = None
 
     def closeEvent(self, event):
+        self._stop_input_calibration_stream()
         if self.parent:
             self.parent.output_voltage_window = None
         self.logger.info("关闭输入/输出校准")
         event.accept()
+
+    def _stop_input_calibration_stream(self):
+        if self.stream_timer.isActive():
+            self.stream_timer.stop()
+        if self.stream_instance is not None:
+            self.stream_instance.stop()
+            self.stream_instance = None
+            AudioSessionManager.release(self)
+        self._set_input_record_idle()
 
 class SoundcardCalibrationManager(object):
     def __init__(self):
